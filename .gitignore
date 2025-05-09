@@ -1,0 +1,26 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+*.env
+
+# VSCode / PyCharm / other IDEs
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
