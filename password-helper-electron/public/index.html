@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Password Helper</title>
+  <style>
+    /* ==== RESET & BASE ==== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width:100%; height:100%; overflow:hidden;
+      background:black; color:white;
+      font-family:'Segoe UI',sans-serif;
+    }
+
+    /* ==== MATRIX BACKGROUND ==== */
+    canvas#matrixCanvas {
+      position:fixed; top:0; left:0;
+      width:100%; height:100%; z-index:0;
+      pointer-events:none;
+      filter:blur(2.5px) brightness(1.3);
+      opacity:0.75;
+    }
+
+    /* ==== TITLEBAR ==== */
+    .titlebar {
+      position:absolute; top:0; left:0;
+      width:100%; height:40px;
+      background:#121212cc; -webkit-app-region:drag;
+      display:flex; justify-content:flex-end; align-items:center;
+      padding:0 10px; z-index:9999;
+      pointer-events:auto;
+    }
+    .titlebar button {
+      -webkit-app-region:no-drag;
+      width:14px; height:14px; margin-left:12px;
+      border:none; border-radius:50%; cursor:pointer;
+      background:transparent; color:white; font-size:11px;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .titlebar .close{ background:#ff5f56; }
+    .titlebar .min  { background:#ffbd2e; }
+    .titlebar .max  { background:#27c93f; }
+
+    /* ==== SCREENS & TRANSITIONS ==== */
+    .screen {
+      position:absolute; top:0; left:0;
+      width:100%; height:100vh;
+      display:flex; align-items:center; justify-content:center;
+      transform:translateY(20px); opacity:0; pointer-events:none;
+      transition:
+        transform 0.6s cubic-bezier(.17,.67,.83,.67),
+        opacity   0.6s ease,
+        width     0.6s cubic-bezier(0.68,-0.55,0.27,1.55);
+      z-index:2;
+    }
+    .screen.active {
+      transform:translateY(0); opacity:1; pointer-events:auto;
+    }
+    #analyzer-screen.adv-open { width:50%; }
+
+    /* ==== CARD ==== */
+    .card {
+      background:rgba(255,255,255,0.06);
+      backdrop-filter:blur(25px);
+      -webkit-backdrop-filter:blur(25px);
+      border-radius:16px; padding:40px;
+      width:90%; max-width:600px;
+      text-align:center;
+      box-shadow:0 0 25px rgba(0,255,255,0.1);
+      z-index:3;
+    }
+    .card h1, .card h2 {
+      margin-bottom:20px;
+      background:linear-gradient(to right,#00ffff,#7289da);
+      -webkit-background-clip:text;
+      background-clip:text; color:transparent;
+    }
+    .card h1 { font-size:36px; }
+    .card h2 { font-size:28px; }
+
+    /* ==== BUTTONS ==== */
+    .btn {
+      display:block; width:70%; margin:16px auto 0;
+      background:#7289da; color:white; border:none;
+      border-radius:8px; padding:12px 26px;
+      font-size:16px; cursor:pointer;
+      transition:transform 0.3s ease, background 0.3s ease;
+    }
+    .btn:hover { background:#5b6eae; transform:scale(1.05); }
+
+    /* ==== PASSWORD FIELD + TOGGLE ==== */
+    .password-container {
+      position:relative; width:300px; margin:0 auto 16px;
+    }
+    .password-container input {
+      width:100%; padding:12px; padding-right:40px;
+      font-size:18px; border:none; border-radius:8px;
+      background:#ffffff12; color:white;
+      backdrop-filter:blur(10px);
+      outline:none; transition:border 0.2s ease;
+    }
+    .password-container input:focus {
+      border:2px solid #7289da;
+    }
+    .password-container button {
+      position:absolute; top:50%; right:10px;
+      transform:translateY(-50%);
+      background:transparent; border:none; cursor:pointer;
+      z-index:4;
+    }
+    .password-container img { width:24px; height:24px; }
+
+    /* ==== STRENGTH BAR ==== */
+    #strength-bar {
+      width:100%; height:18px; margin:10px 0;
+      background:linear-gradient(to right,red,orange,yellow,green);
+      border-radius:10px; overflow:hidden; position:relative;
+    }
+    #bar-mask {
+      position:absolute; top:0; right:0;
+      height:100%; background:rgba(30,30,30,0.9);
+      transition:width 0.3s ease;
+    }
+
+    /* ==== REQUIREMENTS ==== */
+    .requirements { text-align:left; margin-top:16px; }
+    .requirements p {
+      margin:4px 0; transition:opacity 0.3s ease;
+    }
+    .requirements p.fulfilled {
+      opacity:0.25; text-decoration:line-through;
+    }
+
+    /* ==== SLIDER SWITCH ==== */
+    .advanced-option {
+      display:flex; align-items:center; margin:12px 0;
+    }
+    .switch {
+      position:relative; width:50px; height:24px; margin-right:12px;
+    }
+    .switch input { opacity:0; width:0; height:0; }
+    .slider-track {
+      position:absolute; inset:0;
+      background-color:#444; border-radius:24px;
+      transition:background-color 0.4s;
+    }
+    .slider-thumb {
+      position:absolute; top:2px; left:2px;
+      width:20px; height:20px; background:white;
+      border-radius:50%; transition:transform 0.4s;
+    }
+    .switch input:checked + .slider-track {
+      background-color:#7289da;
+    }
+    .switch input:checked + .slider-track .slider-thumb {
+      transform:translateX(26px);
+    }
+
+    /* ==== ADVANCED PANEL ==== */
+    #advanced-panel {
+      position:absolute; top:0; right:-50%;
+      width:50%; height:100vh;
+      display:flex; align-items:center; justify-content:center;
+      opacity:0; pointer-events:none;
+      transition:
+        right 0.6s cubic-bezier(0.68,-0.55,0.27,1.55),
+        opacity 0.6s ease;
+      z-index:2;
+    }
+    #advanced-panel.open {
+      right:0; opacity:1; pointer-events:auto;
+    }
+
+    /* ==== HASH OUTPUT ==== */
+    #hash-output {
+      max-height:0; opacity:0; overflow:hidden;
+      width:calc(100% - 62px - 16px);
+      margin:12px 0 12px 62px;
+      font-family:monospace;
+      background:rgba(255,255,255,0.12);
+      color:white; border:none; border-radius:6px;
+      padding:0 8px; resize:none; text-align:center;
+      transition:
+        max-height 0.4s ease,
+        opacity     0.3s ease,
+        padding     0.4s ease,
+        margin      0.4s ease;
+    }
+    #hash-output.visible {
+      max-height:3em; opacity:1; padding:8px;
+    }
+
+    /* ==== COMMON INFO BOX ==== */
+    #common-info {
+      max-height:0; opacity:0; overflow:hidden;
+      width:calc(100% - 62px - 16px);
+      margin:0 0 0 62px;
+      font-family:monospace;
+      background:rgba(255,255,255,0.12);
+      color:white; border:none; border-radius:6px;
+      padding:0 8px; resize:none; text-align:left;
+      transition:
+        max-height 0.4s ease,
+        opacity     0.3s ease,
+        padding     0.4s ease,
+        margin      0.4s ease;
+    }
+    #common-info.visible {
+      max-height:8em; opacity:1;
+      margin:12px 0 12px 62px; padding:8px;
+    }
+
+    /* ==== TOAST ==== */
+    #toast-container {
+      position:fixed; bottom:20px; left:50%;
+      transform:translateX(-50%); z-index:10;
+      pointer-events:none;
+    }
+    .toast {
+      background:rgba(0,0,0,0.8);
+      color:#fff; padding:8px 16px; margin-top:8px;
+      border-radius:16px; font-size:14px;
+      opacity:0; transform:translateY(20px);
+      transition:opacity 0.4s ease, transform 0.4s ease;
+    }
+    .toast.show { opacity:1; transform:translateY(0); }
+    @keyframes shake {
+      0%,100%{transform:translateX(-50%) translateX(0);}
+      25%   {transform:translateX(-50%) translateX(-5px);}
+      75%   {transform:translateX(-50%) translateX(5px);}
+    }
+    #toast-container.shake{animation:shake 0.5s ease;}
+  </style>
+
+  <!-- zxcvbn for crack‐time + dictionary feedback -->
+  <script src="https://cdn.jsdelivr.net/npm/zxcvbn@4.4.2/dist/zxcvbn.js"></script>
+</head>
+<body>
+  <script> const { ipcRenderer } = require('electron'); </script>
+  <canvas id="matrixCanvas"></canvas>
+
+  <!-- TITLEBAR -->
+  <div class="titlebar">
+    <button class="min"
+            onmouseenter="this.textContent='–'" onmouseleave="this.textContent=''"
+            onclick="ipcRenderer.send('window-control','min')"></button>
+    <button class="max"
+            onmouseenter="this.textContent='▢'" onmouseleave="this.textContent=''"
+            onclick="ipcRenderer.send('window-control','max')"></button>
+    <button class="close"
+            onmouseenter="this.textContent='✕'" onmouseleave="this.textContent=''"
+            onclick="ipcRenderer.send('window-control','close')"></button>
+  </div>
+
+  <!-- MAIN MENU -->
+  <div id="main-menu" class="screen active">
+    <div class="card">
+      <h1>🔐 Password Helper</h1>
+      <button class="btn" onclick="goToAnalyzer()">🛡️ Password Analyzer</button>
+      <button class="btn" onclick="goToSettings()">⚙️ Settings</button>
+    </div>
+  </div>
+
+  <!-- SETTINGS SCREEN -->
+  <div id="settings-screen" class="screen">
+    <div class="card">
+      <h1>⚙️ Settings</h1>
+      <div class="advanced-option">
+        <label for="opt-clear" class="switch">
+          <input type="checkbox" id="opt-clear">
+          <span class="slider-track"><span class="slider-thumb"></span></span>
+        </label>
+        <label for="opt-clear">Clear password on Back</label>
+      </div>
+      <button class="btn" onclick="backToMain()">← Back</button>
+    </div>
+  </div>
+
+  <!-- ANALYZER SCREEN -->
+  <div id="analyzer-screen" class="screen">
+    <div class="card">
+      <h1>🛡️ Password Analyzer</h1>
+      <div class="password-container">
+        <input id="password"
+               type="password"
+               placeholder="Type your password…"
+               oninput="liveAnalyze()">
+        <button id="togglePwd" onclick="togglePassword()">
+          <img id="toggleIcon" src="icons/eye.png" alt="toggle">
+        </button>
+      </div>
+      <div id="strength-bar"><div id="bar-mask" style="width:100%"></div></div>
+      <div id="result"></div>
+      <div class="requirements">
+        <p id="req-length">• At least 12 characters</p>
+        <p id="req-upper">• Add uppercase letters</p>
+        <p id="req-lower">• Add lowercase letters</p>
+        <p id="req-digit">• Add numbers</p>
+        <p id="req-special">• Add special characters (!@#$…)</p>
+      </div>
+
+      <div class="advanced-option">
+        <label for="masterToggle" class="switch">
+          <input type="checkbox" id="masterToggle">
+          <span class="slider-track"><span class="slider-thumb"></span></span>
+        </label>
+        <label for="masterToggle">Advanced Options</label>
+      </div>
+      <button class="btn" onclick="goToMain()">← Back</button>
+    </div>
+  </div>
+
+  <!-- ADVANCED PANEL -->
+  <div id="advanced-panel">
+    <div class="card">
+      <h2>Advanced Features</h2>
+
+      <div class="advanced-option">
+        <label class="switch">
+          <input type="checkbox" id="opt-common">
+          <span class="slider-track"><span class="slider-thumb"></span></span>
+        </label>
+        <label for="opt-common">Check breached passwords</label>
+      </div>
+      <!-- only changed this line: -->
+      <textarea id="common-info" rows="3" readonly placeholder="Insights appear here…"></textarea>
+
+      <div class="advanced-option">
+        <label class="switch">
+          <input type="checkbox" id="opt-hash">
+          <span class="slider-track"><span class="slider-thumb"></span></span>
+        </label>
+        <label for="opt-hash">Show password hash</label>
+      </div>
+      <textarea id="hash-output" rows="2" readonly></textarea>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <script>
+    const MAX_TOASTS     = 3;
+    const mainMenu       = document.getElementById('main-menu');
+    const analyzer       = document.getElementById('analyzer-screen');
+    const advPanel       = document.getElementById('advanced-panel');
+    const settingsScreen = document.getElementById('settings-screen');
+    const masterToggle   = document.getElementById('masterToggle');
+    const clearToggle    = document.getElementById('opt-clear');
+    const pwdInput       = document.getElementById('password');
+    const toggleIcon     = document.getElementById('toggleIcon');
+    const barMask        = document.getElementById('bar-mask');
+    const result         = document.getElementById('result');
+    const optHash        = document.getElementById('opt-hash');
+    const optCommon      = document.getElementById('opt-common');
+    const hashOutput     = document.getElementById('hash-output');
+    const commonInfo     = document.getElementById('common-info');
+    const toastCt        = document.getElementById('toast-container');
+
+    // preference: clear on back
+    if (localStorage.getItem('clearOnBack')===null) {
+      localStorage.setItem('clearOnBack','true');
+    }
+    clearToggle.checked = localStorage.getItem('clearOnBack')==='true';
+    clearToggle.addEventListener('change', ()=>{
+      localStorage.setItem('clearOnBack', clearToggle.checked);
+    });
+
+    function goToAnalyzer(){
+      mainMenu.classList.remove('active');
+      analyzer.classList.add('active');
+    }
+    function goToSettings(){
+      mainMenu.classList.remove('active');
+      settingsScreen.classList.add('active');
+    }
+    function backToMain(){
+      settingsScreen.classList.remove('active');
+      mainMenu.classList.add('active');
+    }
+
+    function goToMain(){
+      analyzer.classList.remove('active','adv-open');
+      advPanel.classList.remove('open');
+      masterToggle.checked = false;
+      hideHash();
+      hideCommon();
+
+      if (localStorage.getItem('clearOnBack')==='true'){
+        pwdInput.value = '';
+        barMask.style.width='100%';
+        result.textContent='';
+      } else {
+        if (pwdInput.type!=='password'){
+          pwdInput.type='password';
+          toggleIcon.src='icons/eye.png';
+        }
+      }
+      mainMenu.classList.add('active');
+    }
+
+    masterToggle.addEventListener('change', ()=>{
+      if (masterToggle.checked){
+        analyzer.classList.add('adv-open');
+        advPanel.classList.add('open');
+      } else {
+        analyzer.classList.remove('adv-open');
+        advPanel.classList.remove('open');
+      }
+    });
+
+    function togglePassword(){
+      const isText = pwdInput.type==='text';
+      pwdInput.type = isText?'password':'text';
+      toggleIcon.src = isText?'icons/eye.png':'icons/eye-slash.png';
+      pwdInput.setSelectionRange(pwdInput.value.length,pwdInput.value.length);
+      if (optHash.checked) updateHash();
+    }
+
+    function showToast(msg){
+      if (toastCt.childElementCount>=MAX_TOASTS){
+        toastCt.classList.add('shake');
+        setTimeout(()=>toastCt.classList.remove('shake'),500);
+        return;
+      }
+      const t=document.createElement('div');
+      t.className='toast'; t.textContent=msg;
+      toastCt.appendChild(t);
+      requestAnimationFrame(()=>t.classList.add('show'));
+      setTimeout(()=>{
+        t.classList.remove('show');
+        setTimeout(()=>toastCt.removeChild(t),400);
+      },3000);
+    }
+
+    async function computeHash(str){
+      const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+      return Array.from(new Uint8Array(buf))
+        .map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+    async function updateHash(){
+      if (!pwdInput.value.trim()) return hideHash();
+      hashOutput.value = await computeHash(pwdInput.value);
+      hashOutput.classList.add('visible');
+    }
+    function hideHash(){
+      hashOutput.classList.remove('visible');
+      hashOutput.value = '';
+    }
+    optHash.addEventListener('change', async ()=>{
+      if (!optHash.checked){ hideHash(); return; }
+      if (!pwdInput.value.trim()){
+        optHash.checked=false; showToast('Please type a password first');
+        return;
+      }
+      await updateHash();
+    });
+
+    // re-run liveAnalyze on toggle
+    optCommon.addEventListener('change', ()=>{
+      if (pwdInput.value.trim()) liveAnalyze();
+    });
+
+    // hide common-info
+    function hideCommon(){
+      commonInfo.classList.remove('visible');
+      commonInfo.value = '';
+    }
+
+    // zxcvbn sequence/dictionary feedback
+    function fillCommonInfo(feedback){
+      let info = '';
+      if (feedback.feedback.warning) info += feedback.feedback.warning + '\n';
+      if (feedback.feedback.suggestions.length){
+        info += feedback.feedback.suggestions.join(' ') + '\n';
+      }
+      const matches = feedback.sequence
+        .filter(s=>s.dictionaryName)
+        .map(s=>`${s.token} (${s.dictionaryName})`);
+      if (matches.length){
+        info += 'Matches: ' + matches.join(', ');
+      }
+      commonInfo.value = info.trim() || 'No common patterns detected.';
+      commonInfo.classList.add('visible');
+    }
+
+    // Pwned-passwords k-anonymity
+    async function checkPwned(pwd){
+      const sha1 = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(pwd))
+        .then(buf=>Array.from(new Uint8Array(buf))
+          .map(b=>b.toString(16).padStart(2,'0')).join('').toUpperCase());
+      const prefix=sha1.slice(0,5), suffix=sha1.slice(5);
+      const res=await fetch(`https://api.pwnedpasswords.com/range/${prefix}`);
+      const text=await res.text();
+      for(const line of text.split('\r\n')){
+        const [h,c]=line.split(':');
+        if(h===suffix) return parseInt(c,10);
+      }
+      return 0;
+    }
+
+    // LIVE ANALYZE
+    async function liveAnalyze(){
+      const pwd = pwdInput.value;
+      let score = 0, checks = {
+        length:  pwd.length>=12,
+        upper:   /[A-Z]/.test(pwd),
+        lower:   /[a-z]/.test(pwd),
+        digit:   /[0-9]/.test(pwd),
+        special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd)
+      };
+      for(let k in checks){
+        document.getElementById(`req-${k}`)
+          .classList.toggle('fulfilled', checks[k]);
+        if(checks[k]) score++;
+      }
+      barMask.style.width = `${100 - (score/5)*100}%`;
+
+      if(!pwd){
+        result.textContent = '';
+        if(optHash.checked) hideHash();
+        hideCommon();
+        return;
+      }
+      if(optHash.checked) updateHash();
+
+      if(optCommon.checked){
+        try {
+          const count = await checkPwned(pwd);
+          if(count>0){
+            result.textContent = `⚠️ Seen in breaches: ${count.toLocaleString()} times!`;
+            fillCommonInfo(zxcvbn(pwd));
+            return;
+          }
+        } catch{}
+      }
+
+      const fb = zxcvbn(pwd);
+      const labels=["Very Weak","Weak","Fair","Strong","Very Strong"];
+      const disp = fb.crack_times_display.offline_slow_hashing_1e4_per_second;
+      result.textContent = `Strength: ${labels[fb.score]} — Crackable in ${disp}`;
+
+      if(optCommon.checked){
+        fillCommonInfo(fb);
+      } else {
+        hideCommon();
+      }
+    }
+
+    // MATRIX EFFECT
+    const canvas=document.getElementById('matrixCanvas'),
+          ctx=canvas.getContext('2d'),
+          size=14;
+    let cols,drops,chars="アァイィウエェカキクケコサシスセソタチツテトナニヌネノ0123456789".split("");
+    function initMatrix(){
+      canvas.width=innerWidth; canvas.height=innerHeight;
+      cols=Math.floor(canvas.width/size);
+      drops=Array(cols).fill(1);
+    }
+    function drawMatrix(){
+      ctx.fillStyle='rgba(0,0,0,0.05)';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle='#0f0'; ctx.font=`${size}px monospace`;
+      drops.forEach((y,i)=>{
+        const c=chars[Math.floor(Math.random()*chars.length)];
+        ctx.fillText(c,i*size,y*size);
+        drops[i] = (y*size>canvas.height && Math.random()>0.975)?0:y+1;
+      });
+    }
+    initMatrix(); setInterval(drawMatrix,33);
+    window.addEventListener('resize',initMatrix);
+
+  </script>
+</body>
+</html>
