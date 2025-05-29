@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Password Helper – Vault</title>
+  <style>
+    /* ==== RESET & BASE ==== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width:100%; height:100%; overflow:hidden;
+      background:black; color:white;
+      font-family:'Segoe UI',sans-serif;
+    }
+
+    /* ==== MATRIX BACKGROUND ==== */
+    canvas#matrixCanvas {
+      position:fixed; top:0; left:0;
+      width:100%; height:100%; z-index:0;
+      pointer-events:none;
+      filter:blur(2.5px) brightness(1.3);
+      opacity:0.75;
+    }
+
+    /* ==== TITLEBAR ==== */
+    .titlebar {
+      position:absolute; top:0; left:0;
+      width:100%; height:40px;
+      background:#121212cc; -webkit-app-region:drag;
+      display:flex; justify-content:flex-end; align-items:center;
+      padding:0 10px; z-index:9999;
+    }
+    .titlebar button {
+      -webkit-app-region:no-drag;
+      width:14px; height:14px; margin-left:12px;
+      border:none; border-radius:50%; cursor:pointer;
+      background:transparent; color:white; font-size:11px;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .titlebar .close{ background:#ff5f56; }
+    .titlebar .min  { background:#ffbd2e; }
+    .titlebar .max  { background:#27c93f; }
+
+    /* ==== SCREENS & TRANSITIONS ==== */
+    .screen {
+      position:absolute; top:0; left:0;
+      width:100%; height:100vh;
+      display:flex; align-items:center; justify-content:center;
+      transform:translateY(20px); opacity:0; pointer-events:none;
+      transition:
+        transform 0.6s cubic-bezier(.17,.67,.83,.67),
+        opacity   0.6s ease;
+      z-index:2;
+    }
+    .screen.active {
+      transform:translateY(0); opacity:1; pointer-events:auto;
+    }
+
+    /* ==== CARD ==== */
+    .card {
+      background:rgba(255,255,255,0.06);
+      backdrop-filter:blur(25px);
+      -webkit-backdrop-filter:blur(25px);
+      border-radius:16px; padding:40px;
+      width:90%; max-width:600px;
+      text-align:center;
+      box-shadow:0 0 25px rgba(0,255,255,0.1);
+      z-index:3;
+    }
+    .card h1 {
+      margin-bottom:30px;
+      background:linear-gradient(to right,#00ffff,#7289da);
+      -webkit-background-clip:text;
+      background-clip:text; color:transparent;
+      font-size:36px;
+    }
+
+    /* ==== UPDATED FORM LAYOUT ==== */
+    .form-group {
+      width: 80%;                 /* 80% of card width */
+      max-width: 400px;           /* no wider than 400px */
+      margin: 16px auto;          /* vertical spacing & centering */
+      text-align: left;
+    }
+    .form-group label {
+      font-size:14px;
+      color:rgba(255,255,255,0.75);
+      letter-spacing:0.5px;
+      margin-bottom:6px;
+      display:block;
+    }
+    .form-group input {
+      width:100%;
+      padding:12px 16px;
+      font-size:16px;
+      color:white;
+      background:rgba(255,255,255,0.12);
+      border:none;
+      border-radius:8px;
+      backdrop-filter:blur(10px);
+      box-shadow: inset 0 2px 8px rgba(0,0,0,0.4);
+      transition: background 0.2s, border 0.2s;
+    }
+    .form-group input:focus {
+      background:rgba(255,255,255,0.18);
+      border:2px solid #7289da;
+      outline:none;
+    }
+
+    /* ==== PASSWORD TOGGLE ==== */
+    .password-container {
+      position: relative;
+      width: 80%;
+      max-width: 400px;
+      margin: 16px auto;
+    }
+    .password-container input {
+      width:100%;
+      padding:12px 40px 12px 16px;
+      font-size:16px;
+      color:white;
+      background:rgba(255,255,255,0.12);
+      border:none;
+      border-radius:8px;
+      box-shadow: inset 0 2px 8px rgba(0,0,0,0.4);
+      transition: background 0.2s, border 0.2s;
+    }
+    .password-container input:focus {
+      background:rgba(255,255,255,0.18);
+      border:2px solid #7289da;
+      outline:none;
+    }
+    .password-container button {
+      position:absolute;
+      top:50%; right:10px;
+      transform:translateY(-50%);
+      background:transparent;
+      border:none;
+      cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      z-index:4;
+    }
+    .password-container img {
+      width:24px; height:24px;
+    }
+
+    /* ==== ACTION BUTTONS ==== */
+    .btn {
+      width: 80%;
+      max-width: 400px;
+      margin: 20px auto 0;
+      padding: 12px 0;
+      background: #7289da;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .btn:hover {
+      background: #5b6eae;
+      transform: translateY(-2px);
+    }
+
+    /* ==== TOAST ==== */
+    #toast-container {
+      position:fixed; bottom:20px; left:50%;
+      transform:translateX(-50%); z-index:10;
+      pointer-events:none;
+    }
+    .toast {
+      background:rgba(0,0,0,0.8);
+      color:#fff; padding:8px 16px; margin-top:8px;
+      border-radius:16px; font-size:14px;
+      opacity:0; transform:translateY(20px);
+      transition:opacity 0.4s ease, transform 0.4s ease;
+      display:flex; align-items:center;
+    }
+    .toast.show { opacity:1; transform:translateY(0); }
+    @keyframes shake {
+      0%,100%{ transform:translateX(-50%) translateX(0); }
+      25%   { transform:translateX(-50%) translateX(-5px); }
+      75%   { transform:translateX(-50%) translateX(5px); }
+    }
+    #toast-container.shake { animation:shake 0.5s ease; }
+  </style>
+</head>
+<body>
+  <script> const { ipcRenderer } = require('electron'); </script>
+  <canvas id="matrixCanvas"></canvas>
+
+  <!-- TITLEBAR -->
+  <div class="titlebar">
+    <button class="min"
+      onmouseenter="this.textContent='–'" onmouseleave="this.textContent=''"
+      onclick="ipcRenderer.send('window-control','min')"></button>
+    <button class="max"
+      onmouseenter="this.textContent='▢'" onmouseleave="this.textContent=''"
+      onclick="ipcRenderer.send('window-control','max')"></button>
+    <button class="close"
+      onmouseenter="this.textContent='✕'" onmouseleave="this.textContent=''"
+      onclick="ipcRenderer.send('window-control','close')"></button>
+  </div>
+
+  <!-- VAULT LIST SCREEN -->
+  <div id="vault-screen" class="screen active">
+    <div class="card">
+      <h1>🗄️ Vault</h1>
+      <ul id="vault-list"></ul>
+      <button class="btn" onclick="goToAdd()">➕ Add New</button>
+      <button class="btn" onclick="goBack()">← Back</button>
+    </div>
+  </div>
+
+  <!-- ADD ENTRY SCREEN -->
+  <div id="add-screen" class="screen">
+    <div class="card">
+      <h1>➕ Add Entry</h1>
+
+      <div class="form-group">
+        <label for="site">Site / App</label>
+        <input type="text" id="site" placeholder="e.g. example.com">
+      </div>
+
+      <div class="form-group">
+        <label for="username">Username / Email</label>
+        <input type="text" id="username" placeholder="e.g. you@example.com">
+      </div>
+
+      <div class="password-container">
+        <input type="password" id="vault-password" placeholder="Enter password">
+        <button onclick="toggleVaultPwd()">
+          <img id="vault-toggle-icon" src="icons/eye.png" alt="toggle">
+        </button>
+      </div>
+
+      <button class="btn" onclick="saveEntry()">💾 Save</button>
+      <button class="btn" onclick="goToList()">← Cancel</button>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container"></div>
+
+  <script>
+    // MATRIX EFFECT
+    const canvas=document.getElementById('matrixCanvas'),
+          ctx=canvas.getContext('2d'), size=14;
+    let cols, drops;
+    const chars="アァイィウエェカキクケコサシスセソタチツテトナニヌネノ0123456789".split("");
+    function initMatrix(){
+      canvas.width=innerWidth; canvas.height=innerHeight;
+      cols=Math.floor(canvas.width/size); drops=Array(cols).fill(1);
+    }
+    function drawMatrix(){
+      ctx.fillStyle='rgba(0,0,0,0.05)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle='#0f0'; ctx.font=`${size}px monospace`;
+      drops.forEach((y,i)=>{
+        const c=chars[Math.floor(Math.random()*chars.length)];
+        ctx.fillText(c,i*size,y*size);
+        drops[i]=(y*size>canvas.height&&Math.random()>0.975)?0:y+1;
+      });
+    }
+    initMatrix(); setInterval(drawMatrix,33);
+    window.addEventListener('resize',initMatrix);
+
+    // TOASTS
+    const toastCt=document.getElementById('toast-container');
+    function showToast(msg){
+      if(toastCt.childElementCount>=3){
+        toastCt.classList.add('shake');
+        setTimeout(()=>toastCt.classList.remove('shake'),500);
+        return;
+      }
+      const t=document.createElement('div');
+      t.className='toast'; t.textContent=msg;
+      toastCt.appendChild(t);
+      requestAnimationFrame(()=>t.classList.add('show'));
+      setTimeout(()=>{
+        t.classList.remove('show');
+        setTimeout(()=>toastCt.removeChild(t),400);
+      },3000);
+    }
+
+    // SCREENS & DATA
+    const vaultListScreen=document.getElementById('vault-screen'),
+          addScreen=document.getElementById('add-screen'),
+          vaultList=document.getElementById('vault-list'),
+          siteInput=document.getElementById('site'),
+          userInput=document.getElementById('username'),
+          pwdInput=document.getElementById('vault-password'),
+          toggleIcon=document.getElementById('vault-toggle-icon');
+    let entries=[];
+
+    function renderList(){
+      vaultList.innerHTML='';
+      entries.forEach((e,i)=>{
+        const li=document.createElement('li'),
+              info=document.createElement('div'),
+              viewBtn=document.createElement('button'),
+              delBtn=document.createElement('button');
+        info.className='info';
+        info.innerHTML=`<strong>${e.site}</strong><br>${e.user}<br><span class="hidden-pass">••••••••</span>`;
+        viewBtn.innerHTML='👁️'; viewBtn.onclick=()=>{
+          const p=info.querySelector('.hidden-pass');
+          if(p.dataset.visible==='true'){
+            p.textContent='••••••••'; p.dataset.visible='false'; viewBtn.style.opacity='1';
+          } else {
+            p.textContent=e.pass; p.dataset.visible='true'; viewBtn.style.opacity='.6';
+          }
+        };
+        delBtn.innerHTML='✕'; delBtn.onclick=()=>{ entries.splice(i,1); renderList(); };
+        li.append(info,viewBtn,delBtn);
+        vaultList.appendChild(li);
+      });
+    }
+
+    function goToAdd(){ vaultListScreen.classList.remove('active'); addScreen.classList.add('active'); }
+    function goToList(){ addScreen.classList.remove('active'); vaultListScreen.classList.add('active'); }
+    function goBack(){ window.location.href='index.html'; }
+
+    function saveEntry(){
+      if(!siteInput.value.trim()||!userInput.value.trim()||!pwdInput.value.trim()){
+        return showToast('All fields are required.');
+      }
+      entries.push({site:siteInput.value, user:userInput.value, pass:pwdInput.value});
+      renderList(); goToList(); showToast('Entry saved.');
+    }
+
+    function toggleVaultPwd(){
+      const isText=pwdInput.type==='text';
+      pwdInput.type=isText?'password':'text';
+      toggleIcon.src=isText?'icons/eye.png':'icons/eye-slash.png';
+      pwdInput.setSelectionRange(pwdInput.value.length,pwdInput.value.length);
+    }
+
+    // initialize
+    renderList();
+  </script>
+</body>
+</html>

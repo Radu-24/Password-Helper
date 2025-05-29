@@ -257,6 +257,7 @@
     <div class="card">
       <h1>🔐 Password Helper</h1>
       <button class="btn" onclick="goToAnalyzer()">🛡️ Password Analyzer</button>
+      <button class="btn" onclick="goToVault()">🗄️ Vault</button>
       <button class="btn" onclick="goToSettings()">⚙️ Settings</button>
     </div>
   </div>
@@ -322,7 +323,6 @@
         </label>
         <label for="opt-common">Check breached passwords</label>
       </div>
-      <!-- only changed this line: -->
       <textarea id="common-info" rows="3" readonly placeholder="Insights appear here…"></textarea>
 
       <div class="advanced-option">
@@ -370,6 +370,11 @@
       mainMenu.classList.remove('active');
       analyzer.classList.add('active');
     }
+
+    function goToVault(){
+      window.location.href = 'vault.html';
+    }
+
     function goToSettings(){
       mainMenu.classList.remove('active');
       settingsScreen.classList.add('active');
@@ -411,8 +416,8 @@
 
     function togglePassword(){
       const isText = pwdInput.type==='text';
-      pwdInput.type = isText?'password':'text';
-      toggleIcon.src = isText?'icons/eye.png':'icons/eye-slash.png';
+      pwdInput.type = isText ? 'password' : 'text';
+      toggleIcon.src = isText ? 'icons/eye.png' : 'icons/eye-slash.png';
       pwdInput.setSelectionRange(pwdInput.value.length,pwdInput.value.length);
       if (optHash.checked) updateHash();
     }
@@ -456,37 +461,22 @@
       await updateHash();
     });
 
-    // re-run liveAnalyze on toggle
-    optCommon.addEventListener('change', ()=>{
-      if (pwdInput.value.trim()) liveAnalyze();
-    });
-
-    // hide common-info
+    optCommon.addEventListener('change', ()=>{ if (pwdInput.value) liveAnalyze(); });
     function hideCommon(){
-      commonInfo.classList.remove('visible');
-      commonInfo.value = '';
+      commonInfo.classList.remove('visible'); commonInfo.value='';
     }
-
-    // zxcvbn sequence/dictionary feedback
     function fillCommonInfo(feedback){
-      let info = '';
-      if (feedback.feedback.warning) info += feedback.feedback.warning + '\n';
-      if (feedback.feedback.suggestions.length){
-        info += feedback.feedback.suggestions.join(' ') + '\n';
-      }
-      const matches = feedback.sequence
-        .filter(s=>s.dictionaryName)
-        .map(s=>`${s.token} (${s.dictionaryName})`);
-      if (matches.length){
-        info += 'Matches: ' + matches.join(', ');
-      }
-      commonInfo.value = info.trim() || 'No common patterns detected.';
+      let info='';
+      if(feedback.feedback.warning) info+=feedback.feedback.warning+'\n';
+      if(feedback.feedback.suggestions.length) info+=feedback.feedback.suggestions.join(' ')+'\n';
+      const matches=feedback.sequence.filter(s=>s.dictionaryName).map(s=>`${s.token} (${s.dictionaryName})`);
+      if(matches.length) info+='Matches: '+matches.join(', ');
+      commonInfo.value=info.trim()||'No common patterns detected.';
       commonInfo.classList.add('visible');
     }
 
-    // Pwned-passwords k-anonymity
     async function checkPwned(pwd){
-      const sha1 = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(pwd))
+      const sha1=await crypto.subtle.digest('SHA-1', new TextEncoder().encode(pwd))
         .then(buf=>Array.from(new Uint8Array(buf))
           .map(b=>b.toString(16).padStart(2,'0')).join('').toUpperCase());
       const prefix=sha1.slice(0,5), suffix=sha1.slice(5);
@@ -499,25 +489,24 @@
       return 0;
     }
 
-    // LIVE ANALYZE
     async function liveAnalyze(){
-      const pwd = pwdInput.value;
-      let score = 0, checks = {
-        length:  pwd.length>=12,
-        upper:   /[A-Z]/.test(pwd),
-        lower:   /[a-z]/.test(pwd),
-        digit:   /[0-9]/.test(pwd),
+      const pwd=pwdInput.value;
+      const checks={
+        length: pwd.length>=12,
+        upper: /[A-Z]/.test(pwd),
+        lower: /[a-z]/.test(pwd),
+        digit: /[0-9]/.test(pwd),
         special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd)
       };
+      let score=0;
       for(let k in checks){
-        document.getElementById(`req-${k}`)
-          .classList.toggle('fulfilled', checks[k]);
+        document.getElementById(`req-${k}`).classList.toggle('fulfilled',checks[k]);
         if(checks[k]) score++;
       }
-      barMask.style.width = `${100 - (score/5)*100}%`;
+      barMask.style.width=`${100-(score/5)*100}%`;
 
       if(!pwd){
-        result.textContent = '';
+        result.textContent='';
         if(optHash.checked) hideHash();
         hideCommon();
         return;
@@ -525,26 +514,22 @@
       if(optHash.checked) updateHash();
 
       if(optCommon.checked){
-        try {
-          const count = await checkPwned(pwd);
+        try{
+          const count=await checkPwned(pwd);
           if(count>0){
-            result.textContent = `⚠️ Seen in breaches: ${count.toLocaleString()} times!`;
+            result.textContent=`⚠️ Seen in breaches: ${count.toLocaleString()} times!`;
             fillCommonInfo(zxcvbn(pwd));
             return;
           }
-        } catch{}
+        }catch{}
       }
 
-      const fb = zxcvbn(pwd);
+      const fb=zxcvbn(pwd);
       const labels=["Very Weak","Weak","Fair","Strong","Very Strong"];
-      const disp = fb.crack_times_display.offline_slow_hashing_1e4_per_second;
-      result.textContent = `Strength: ${labels[fb.score]} — Crackable in ${disp}`;
-
-      if(optCommon.checked){
-        fillCommonInfo(fb);
-      } else {
-        hideCommon();
-      }
+      const disp=fb.crack_times_display.offline_slow_hashing_1e4_per_second;
+      result.textContent=`Strength: ${labels[fb.score]} — Crackable in ${disp}`;
+      if(optCommon.checked) fillCommonInfo(fb);
+      else hideCommon();
     }
 
     // MATRIX EFFECT
@@ -564,7 +549,7 @@
       drops.forEach((y,i)=>{
         const c=chars[Math.floor(Math.random()*chars.length)];
         ctx.fillText(c,i*size,y*size);
-        drops[i] = (y*size>canvas.height && Math.random()>0.975)?0:y+1;
+        drops[i]=(y*size>canvas.height && Math.random()>0.975)?0:y+1;
       });
     }
     initMatrix(); setInterval(drawMatrix,33);
