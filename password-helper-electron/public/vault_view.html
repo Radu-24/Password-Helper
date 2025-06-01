@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Password Helper – Vault View</title>
+  <style>
+    /* ==== RESET & BASE ==== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: black; color: white;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    /* ==== MATRIX BACKGROUND ==== */
+    canvas#matrixCanvas {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%; z-index: 0;
+      pointer-events: none;
+      filter: blur(2.5px) brightness(1.3);
+      opacity: 0.75;
+    }
+
+    /* ==== TITLEBAR ==== */
+    .titlebar {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 40px;
+      background: #121212cc; -webkit-app-region: drag;
+      display: flex; justify-content: flex-end; align-items: center;
+      padding: 0 10px; z-index: 9999;
+      pointer-events: auto;
+    }
+    .titlebar button {
+      -webkit-app-region: no-drag;
+      width: 14px; height: 14px; margin-left: 12px;
+      border: none; border-radius: 50%; cursor: pointer;
+      background: transparent; color: white; font-size: 11px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .titlebar .close { background: #ff5f56; }
+    .titlebar .min   { background: #ffbd2e; }
+    .titlebar .max   { background: #27c93f; }
+
+    /* ==== CARD ==== */
+    .card {
+      position: absolute;
+      top: 50px; /* sits below the titlebar */
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      max-width: 700px;
+      height: calc(100vh - 100px); /* fixed height, leaving space for titlebar + margins */
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 0 25px rgba(0,255,255,0.1);
+      z-index: 3;
+      overflow: hidden; /* ensures internal scrolling */
+    }
+    .card h1 {
+      margin: 20px auto 10px auto;
+      font-size: 32px;
+      background: linear-gradient(to right, #00ffff, #7289da);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-align: center;
+    }
+
+    /* ==== ACCORDION & INTERNAL SCROLLBAR ==== */
+    #vault-view-container {
+      flex: 1;               /* occupy all remaining vertical space between heading & back‐button */
+      overflow-y: auto;
+      padding: 0 10px 10px 10px; /* slight padding around entries */
+    }
+    /* Hide default scrollbar buttons */
+    #vault-view-container::-webkit-scrollbar-button { display: none; }
+    /* Slim, transparent track */
+    #vault-view-container::-webkit-scrollbar {
+      width: 8px;
+      background: transparent;
+    }
+    #vault-view-container:hover::-webkit-scrollbar {
+      background: transparent;
+    }
+    /* Thumb styling */
+    #vault-view-container::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(6px);
+      border-radius: 4px;
+      transition: background 0.2s ease;
+    }
+    #vault-view-container::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    /* Each accordion item */
+    .accordion-item {
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 12px;
+      margin: 12px 0;          /* vertical spacing between items */
+      overflow: hidden;
+      box-shadow: 0 0 15px rgba(0,255,255,0.1);
+      transition: max-height 0.4s ease, margin 0.4s ease;
+      max-height: 60px;        /* default collapsed height */
+    }
+    .accordion-item.expanded {
+      max-height: 450px;       /* enough for expanded content, but does NOT change card size */
+    }
+
+    /* Header of each item */
+    .accordion-header {
+      padding: 14px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer;
+    }
+    .accordion-header h2 {
+      font-size: 18px;
+      color: #00ffff;
+      margin: 0;
+    }
+    .accordion-header .icon {
+      font-size: 18px;
+      color: #bbb;
+      transition: transform 0.3s ease;
+    }
+    .accordion-item.expanded .icon {
+      transform: rotate(180deg);
+      color: #fff;
+    }
+
+    /* Content of each item */
+    .accordion-content {
+      padding: 0 20px 36px 20px; /* bottom padding ensures space below Delete */
+      font-size: 14px; color: #ddd; line-height: 1.6;
+      opacity: 0; transition: opacity 0.3s ease 0.1s;
+    }
+    .accordion-item.expanded .accordion-content {
+      opacity: 1;
+    }
+    /* Reduced spacing between label (<p>) and its input */
+    .accordion-content p {
+      margin-bottom: 6px;      /* was 12px, now 6px */
+    }
+
+    /* Frosted‐glass readonly inputs inside expanded area */
+    .accordion-content .frosted-input {
+      width: 100%;
+      padding: 10px 14px;
+      margin-top: 4px;         /* was 6px, now 4px */
+      font-size: 14px;
+      color: white;
+      background: rgba(255,255,255,0.12);
+      border: none;
+      border-radius: 6px;
+      backdrop-filter: blur(10px);
+      box-shadow: inset 0 1px 4px rgba(0,0,0,0.3);
+      outline: none;
+      resize: none;    /* Prevents manual resizing */
+      overflow: hidden; /* Hides its own scrollbar */
+    }
+
+    /* Password field in expanded area */
+    .accordion-content .password-container-expanded {
+      position: relative;
+      margin-top: 4px;       /* synced with other inputs */
+    }
+    .accordion-content .password-container-expanded input {
+      width: 100%;
+      padding: 10px 38px 10px 14px;
+      font-size: 14px;
+      color: white;
+      background: rgba(255,255,255,0.12);
+      border: none;
+      border-radius: 6px;
+      backdrop-filter: blur(10px);
+      box-shadow: inset 0 1px 4px rgba(0,0,0,0.3);
+      outline: none;
+    }
+    .accordion-content .password-container-expanded button {
+      position: absolute;
+      top: 0; bottom: 0; margin: auto; /* vertically center */
+      right: 10px;
+      background: transparent; border: none; cursor: pointer;
+      z-index: 4;
+    }
+    .accordion-content .password-container-expanded button img {
+      width: 20px; height: 20px;
+    }
+
+    /* Delete button */
+    .delete-button {
+      background: #ff5f56;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      border-radius: 6px;
+      padding: 6px 12px;
+      margin-top: 6px;       /* slight lift */
+      margin-bottom: 12px;   /* ensures it never touches the bottom edge */
+      float: right;
+      transition: background 0.2s ease;
+    }
+    .delete-button:hover {
+      background: #ffa3a3;
+    }
+
+    /* ==== BACK TO MENU BUTTON ==== */
+    .back-btn {
+      margin: 16px auto 20px auto; /* spaced below accordion */
+      width: 90%;
+      background: #7289da; color: white;
+      border: none; border-radius: 8px;
+      padding: 12px;
+      font-size: 16px; cursor: pointer;
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+    .back-btn:hover {
+      background: #5b6eae; transform: scale(1.02);
+    }
+
+    /* ==== TOAST ==== */
+    #toast-container {
+      position: fixed; bottom: 20px; left: 50%;
+      transform: translateX(-50%); z-index: 10;
+      pointer-events: none;
+    }
+    .toast {
+      background: rgba(0,0,0,0.8);
+      color: #fff; padding: 8px 16px; margin-top: 8px;
+      border-radius: 16px; font-size: 14px;
+      opacity: 0; transform: translateY(20px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+      display: flex; align-items: center;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    @keyframes shake {
+      0%,100% { transform: translateX(-50%) translateX(0); }
+      25%      { transform: translateX(-50%) translateX(-5px); }
+      75%      { transform: translateX(-50%) translateX(5px); }
+    }
+    #toast-container.shake { animation: shake 0.5s ease; }
+  </style>
+</head>
+<body>
+  <script> const { ipcRenderer } = require('electron'); </script>
+  <canvas id="matrixCanvas"></canvas>
+
+  <!-- TITLEBAR -->
+  <div class="titlebar">
+    <button class="min"
+            onmouseenter="this.textContent='–'" onmouseleave="this.textContent=''"
+            onclick="ipcRenderer.send('window-control','min')"></button>
+    <button class="max"
+            onmouseenter="this.textContent='▢'" onmouseleave="this.textContent=''"
+            onclick="ipcRenderer.send('window-control','max')"></button>
+    <button class="close"
+            onmouseenter="this.textContent='✕'" onmouseleave="this.textContent=''"
+            onclick="ipcRenderer.send('window-control','close')"></button>
+  </div>
+
+  <!-- FIXED-SIZE CARD CONTAINER -->
+  <div class="card">
+    <h1>🔓 Vault View</h1>
+
+    <!-- Accordion container (scrolls internally) -->
+    <div id="vault-view-container"></div>
+
+    <!-- Always-visible “Back to Menu” button -->
+    <button class="back-btn" onclick="goBack()">← Back to Menu</button>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container"></div>
+
+  <script>
+    /* ===== MATRIX EFFECT ===== */
+    const canvas = document.getElementById('matrixCanvas'),
+          ctx    = canvas.getContext('2d'),
+          size   = 14;
+    let cols, drops;
+    const chars = "アァイィウエェカキクケコサシ斯セソタチツテトナニヌネノ0123456789".split("");
+
+    function initMatrix(){
+      canvas.width = innerWidth;
+      canvas.height = innerHeight;
+      cols = Math.floor(canvas.width / size);
+      drops = Array(cols).fill(1);
+    }
+    function drawMatrix(){
+      ctx.fillStyle = 'rgba(0,0,0,0.05)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#0f0';
+      ctx.font = `${size}px monospace`;
+      drops.forEach((y, i) => {
+        const c = chars[Math.floor(Math.random() * chars.length)];
+        ctx.fillText(c, i * size, y * size);
+        drops[i] = (y * size > canvas.height && Math.random() > 0.975) ? 0 : y + 1;
+      });
+    }
+    initMatrix();
+    setInterval(drawMatrix, 33);
+    window.addEventListener('resize', initMatrix);
+
+    /* ===== TOASTS ===== */
+    const toastCt = document.getElementById('toast-container');
+    function showToast(msg){
+      if (toastCt.childElementCount >= 3){
+        toastCt.classList.add('shake');
+        setTimeout(()=>toastCt.classList.remove('shake'), 500);
+        return;
+      }
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.textContent = msg;
+      toastCt.appendChild(t);
+      requestAnimationFrame(()=>t.classList.add('show'));
+      setTimeout(()=>{
+        t.classList.remove('show');
+        setTimeout(()=>toastCt.removeChild(t), 400);
+      }, 3000);
+    }
+
+    /* ===== NAVIGATION ===== */
+    function goBack(){
+      window.location.href = 'vault.html';
+    }
+
+    /* ===== LOAD & RENDER ENTRIES ===== */
+    const vaultViewCont = document.getElementById('vault-view-container');
+    let entries = [];
+    if (localStorage.getItem('vaultEntries')){
+      try {
+        entries = JSON.parse(localStorage.getItem('vaultEntries'));
+      } catch {
+        entries = [];
+      }
+    }
+
+    function persistEntries(){
+      localStorage.setItem('vaultEntries', JSON.stringify(entries));
+    }
+
+    function renderAccordion(){
+      vaultViewCont.innerHTML = '';
+      if (!entries.length){
+        const p = document.createElement('p');
+        p.style.color = 'rgba(255,255,255,0.5)';
+        p.style.textAlign = 'center';
+        p.style.marginTop = '40px';
+        p.textContent = 'No entries saved.';
+        vaultViewCont.appendChild(p);
+        return;
+      }
+
+      entries.forEach((e, idx) => {
+        // Accordion item container
+        const item = document.createElement('div');
+        item.className = 'accordion-item collapsed';
+
+        // Header (title + arrow)
+        const header = document.createElement('div');
+        header.className = 'accordion-header';
+        const title = document.createElement('h2');
+        title.textContent = `${e.label} (${e.type})`;
+        const icon = document.createElement('span');
+        icon.className = 'icon';
+        icon.textContent = '▾';
+        header.append(title, icon);
+
+        header.onclick = () => {
+          if (item.classList.contains('collapsed')){
+            item.classList.remove('collapsed');
+            item.classList.add('expanded');
+          } else {
+            item.classList.remove('expanded');
+            item.classList.add('collapsed');
+          }
+        };
+
+        // Content wrapper
+        const content = document.createElement('div');
+        content.className = 'accordion-content';
+
+        // 1) Username (if provided)
+        if (e.user){
+          const labelUser = document.createElement('p');
+          labelUser.innerHTML = `<strong>Username:</strong>`;
+          content.appendChild(labelUser);
+
+          const inputUser = document.createElement('input');
+          inputUser.className = 'frosted-input';
+          inputUser.type = 'text';
+          inputUser.value = e.user;
+          inputUser.readOnly = true;
+          content.appendChild(inputUser);
+        }
+
+        // 2) Password
+        {
+          const labelPass = document.createElement('p');
+          labelPass.innerHTML = `<strong>Password:</strong>`;
+          content.appendChild(labelPass);
+
+          const pwdContainerExp = document.createElement('div');
+          pwdContainerExp.className = 'password-container-expanded';
+
+          const inputPass = document.createElement('input');
+          inputPass.className = 'frosted-input';
+          inputPass.type = 'password';
+          inputPass.value = e.pass;
+          inputPass.readOnly = true;
+          pwdContainerExp.appendChild(inputPass);
+
+          const toggleBtn = document.createElement('button');
+          const eyeIcon = document.createElement('img');
+          eyeIcon.src = 'icons/eye.png';
+          eyeIcon.alt = 'toggle';
+          toggleBtn.appendChild(eyeIcon);
+          pwdContainerExp.appendChild(toggleBtn);
+
+          toggleBtn.onclick = () => {
+            if (inputPass.type === 'password'){
+              inputPass.type = 'text';
+              eyeIcon.src = 'icons/eye-slash.png';
+            } else {
+              inputPass.type = 'password';
+              eyeIcon.src = 'icons/eye.png';
+            }
+          };
+
+          content.appendChild(pwdContainerExp);
+        }
+
+        // 3) Notes (if provided, auto-resize)
+        if (e.notes){
+          const labelNotes = document.createElement('p');
+          labelNotes.innerHTML = `<strong>Notes:</strong>`;
+          content.appendChild(labelNotes);
+
+          const inputNotes = document.createElement('textarea');
+          inputNotes.className = 'frosted-input';
+          inputNotes.value = e.notes;
+          inputNotes.readOnly = true;
+          inputNotes.rows = 1;
+          inputNotes.style.height = 'auto';
+          inputNotes.style.overflow = 'hidden';
+          // Auto-resize to fit content
+          requestAnimationFrame(() => {
+            inputNotes.style.height = inputNotes.scrollHeight + 'px';
+          });
+          content.appendChild(inputNotes);
+        }
+
+        // 4) Delete button
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete-button';
+        delBtn.innerHTML = `<span style="font-size:18px; margin-right:6px;">🗑️</span>Delete`;
+        delBtn.onclick = () => {
+          entries.splice(idx, 1);
+          persistEntries();
+          renderAccordion();
+          showToast('Entry deleted');
+        };
+        content.appendChild(delBtn);
+
+        // Assemble and append
+        item.append(header, content);
+        vaultViewCont.appendChild(item);
+      });
+    }
+
+    renderAccordion();
+  </script>
+</body>
+</html>
