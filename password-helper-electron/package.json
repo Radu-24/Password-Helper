@@ -12,5 +12,8 @@
   "description": "",
   "devDependencies": {
     "electron": "^36.2.1"
+  },
+  "dependencies": {
+    "password-helper-electron": "file:"
   }
 }
