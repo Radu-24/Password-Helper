@@ -41,21 +41,34 @@
     .titlebar .min   { background: #ffbd2e; }
     .titlebar .max   { background: #27c93f; }
 
+    /* ==== SCREENS & TRANSITIONS ==== */
+    .screen {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      transform: translateY(20px); opacity: 0; pointer-events: none;
+      transition:
+        transform 0.6s cubic-bezier(.17,.67,.83,.67),
+        opacity   0.6s ease;
+      z-index: 2;
+    }
+    .screen.active {
+      transform: translateY(0); opacity: 1; pointer-events: auto;
+    }
+
     /* ==== CARD ==== */
     .card {
-      position: absolute;
-      top: 50px; /* sits below the titlebar */
-      left: 50%;
-      transform: translateX(-50%);
       width: 90%;
       max-width: 700px;
-      height: calc(100vh - 100px); /* fixed height, leaving space for titlebar + margins */
+      height: calc(100vh - 100px); /* leave space for titlebar */
+      padding: 40px;
       background: rgba(255,255,255,0.06);
       backdrop-filter: blur(25px);
       -webkit-backdrop-filter: blur(25px);
       border-radius: 16px;
       display: flex;
       flex-direction: column;
+      text-align: center;
       box-shadow: 0 0 25px rgba(0,255,255,0.1);
       z-index: 3;
       overflow: hidden; /* ensures internal scrolling */
@@ -211,18 +224,19 @@
       background: #ffa3a3;
     }
 
+    /* ==== BUTTONS ==== */
+    .btn {
+      display: block; width: 70%; margin: 16px auto 0;
+      background: #7289da; color: white; border: none;
+      border-radius: 8px; padding: 12px 26px;
+      font-size: 16px; cursor: pointer;
+      transition: transform 0.3s ease, background 0.3s ease;
+    }
+    .btn:hover { background: #5b6eae; transform: scale(1.05); }
+
     /* ==== BACK TO MENU BUTTON ==== */
     .back-btn {
-      margin: 16px auto 20px auto; /* spaced below accordion */
-      width: 90%;
-      background: #7289da; color: white;
-      border: none; border-radius: 8px;
-      padding: 12px;
-      font-size: 16px; cursor: pointer;
-      transition: background 0.3s ease, transform 0.3s ease;
-    }
-    .back-btn:hover {
-      background: #5b6eae; transform: scale(1.02);
+      margin: 16px auto 20px auto;
     }
 
     /* ==== TOAST ==== */
@@ -266,14 +280,16 @@
   </div>
 
   <!-- FIXED-SIZE CARD CONTAINER -->
-  <div class="card">
-    <h1>🔓 Vault View</h1>
+  <div class="screen active">
+    <div class="card">
+      <h1>🔓 Vault View</h1>
 
     <!-- Accordion container (scrolls internally) -->
     <div id="vault-view-container"></div>
 
     <!-- Always-visible “Back to Menu” button -->
-    <button class="back-btn" onclick="goBack()">← Back to Menu</button>
+    <button class="btn back-btn" onclick="goBack()">← Back to Menu</button>
+    </div>
   </div>
 
   <!-- TOAST CONTAINER -->
