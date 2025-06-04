@@ -11,6 +11,8 @@
       background: black; color: white;
       font-family: 'Segoe UI', sans-serif;
     }
+    body{ opacity:0; transition:opacity 0.5s ease; }
+    body.loaded{ opacity:1; }
 
     /* ==== MATRIX BACKGROUND ==== */
     canvas#matrixCanvas {
@@ -345,7 +347,7 @@
 
     /* ===== NAVIGATION ===== */
     function goBack(){
-      window.location.href = 'vault.html';
+      transitionTo('vault.html');
     }
 
     /* ===== LOAD & RENDER ENTRIES ===== */
@@ -493,6 +495,15 @@
     }
 
     renderAccordion();
+
+    window.addEventListener('DOMContentLoaded', () => {
+      requestAnimationFrame(() => document.body.classList.add('loaded'));
+    });
+
+    function transitionTo(url){
+      document.body.classList.remove('loaded');
+      setTimeout(()=>{ window.location.href=url; }, 500);
+    }
   </script>
 </body>
 </html>
