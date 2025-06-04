@@ -11,6 +11,8 @@
       background: black; color: white;
       font-family: 'Segoe UI', sans-serif;
     }
+    body{ opacity:0; transition:opacity 0.5s ease; }
+    body.loaded{ opacity:1; }
 
     /* ==== MATRIX BACKGROUND ==== */
     canvas#matrixCanvas {
@@ -325,10 +327,10 @@
     }
     function viewAll(){
       // Navigate to the separate vault_view.html
-      window.location.href = 'vault_view.html';
+      transitionTo('vault_view.html');
     }
     function goBack(){
-      window.location.href = 'index.html';
+      transitionTo('index.html');
     }
 
     /* ===== DATA STORAGE ===== */
@@ -389,6 +391,15 @@
       pwdInput.type = isText ? 'password' : 'text';
       toggleIcon.src = isText ? 'icons/eye.png' : 'icons/eye-slash.png';
       pwdInput.setSelectionRange(pwdInput.value.length, pwdInput.value.length);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      requestAnimationFrame(() => document.body.classList.add('loaded'));
+    });
+
+    function transitionTo(url){
+      document.body.classList.remove('loaded');
+      setTimeout(()=>{ window.location.href=url; }, 500);
     }
   </script>
 </body>

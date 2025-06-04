@@ -11,6 +11,8 @@
       background:black; color:white;
       font-family:'Segoe UI',sans-serif;
     }
+    body{ opacity:0; transition:opacity 0.5s ease; }
+    body.loaded{ opacity:1; }
 
     /* ==== MATRIX BACKGROUND ==== */
     canvas#matrixCanvas {
@@ -164,8 +166,9 @@
     initMatrix(); setInterval(drawMatrix, 33);
     window.addEventListener('resize', initMatrix);
 
-    // SWIPE-IN ANIMATION
+    // FADE-IN & SWIPE-IN ANIMATION
     window.addEventListener('DOMContentLoaded', () => {
+      requestAnimationFrame(() => document.body.classList.add('loaded'));
       // slightly delay for smoother reveal
       setTimeout(() => {
         document.getElementById('login-screen').classList.add('active');
@@ -180,12 +183,10 @@
     form.onsubmit = e => {
       e.preventDefault();
       // TODO: call /login or /register on your server
-      // on success: window.location.href = 'index.html';
+      // on success: transitionTo('index.html');
     };
 
-    skip.onclick = () => {
-      window.location.href = 'index.html';
-    };
+    skip.onclick = () => transitionTo('index.html');
 
     toggle.onclick = e => {
       e.preventDefault();
@@ -199,6 +200,11 @@
         toggle.textContent = 'Create account';
       }
     };
+
+    function transitionTo(url){
+      document.body.classList.remove('loaded');
+      setTimeout(()=>{ window.location.href = url; }, 500);
+    }
   </script>
 </body>
 </html>
