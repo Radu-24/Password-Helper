@@ -16,8 +16,10 @@ def analyze():
     if any(c in string.punctuation for c in password): score += 1
 
     levels = ["Very Weak", "Weak", "Fair", "Strong", "Very Strong"]
+    # Map the 0-5 raw score to one of the five strength levels
+    strength = levels[min(score, len(levels) - 1)]
     return jsonify({
-        "strength": levels[score - 1] if score > 0 else "Very Weak",
+        "strength": strength,
         "score": score
     })
 
