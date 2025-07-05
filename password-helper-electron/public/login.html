@@ -4,106 +4,190 @@
   <meta charset="UTF-8" />
   <title>Password Helper – Login</title>
   <style>
-    /* ==== RESET & BASE ==== */
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      width:100%; height:100%; overflow:hidden;
-      background:black; color:white;
-      font-family:'Segoe UI',sans-serif;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: black;
+      color: white;
+      font-family: 'Segoe UI', sans-serif;
     }
-    body{ opacity:0; transition:opacity 0.5s ease; }
-    body.loaded{ opacity:1; }
+    body { opacity: 0; transition: opacity 0.5s ease; }
+    body.loaded { opacity: 1; }
 
-    /* ==== MATRIX BACKGROUND ==== */
     canvas#matrixCanvas {
-      position:fixed; top:0; left:0;
-      width:100%; height:100%; z-index:0;
-      pointer-events:none;
-      filter:blur(2.5px) brightness(1.3);
-      opacity:0.75;
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+      pointer-events: none;
+      filter: blur(2.5px) brightness(1.3);
+      opacity: 0.75;
     }
 
-    /* ==== TITLEBAR ==== */
     .titlebar {
-      position:absolute; top:0; left:0;
-      width:100%; height:40px;
-      background:#121212cc; -webkit-app-region:drag;
-      display:flex; justify-content:flex-end; align-items:center;
-      padding:0 10px; z-index:9999;
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 40px;
+      background: #121212cc; -webkit-app-region: drag;
+      display: flex; justify-content: flex-end; align-items: center;
+      padding: 0 10px; z-index: 9999;
     }
     .titlebar button {
-      -webkit-app-region:no-drag;
-      width:14px; height:14px; margin-left:12px;
-      border:none; border-radius:50%; cursor:pointer;
-      background:transparent; color:white; font-size:11px;
-      display:flex; align-items:center; justify-content:center;
+      -webkit-app-region: no-drag;
+      width: 14px; height: 14px;
+      margin-left: 12px;
+      border: none; border-radius: 50%;
+      cursor: pointer;
+      background: transparent;
+      display: flex; align-items: center; justify-content: center;
     }
-    .titlebar .close{ background:#ff5f56; }
-    .titlebar .min  { background:#ffbd2e; }
-    .titlebar .max  { background:#27c93f; }
+    .titlebar .min { background: #ffbd2e; }
+    .titlebar .max { background: #27c93f; }
+    .titlebar .close { background: #ff5f56; }
 
-    /* ==== SCREENS & TRANSITIONS ==== */
     .screen {
-      position:absolute; top:0; left:0;
-      width:100%; height:100vh;
-      display:flex; align-items:center; justify-content:center;
-      transform:translateY(20px); opacity:0; pointer-events:none;
-      transition:
-        transform 0.6s cubic-bezier(.17,.67,.83,.67),
-        opacity   0.6s ease;
-      z-index:2;
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      transform: translateY(20px); opacity: 0; pointer-events: none;
+      transition: transform 0.6s cubic-bezier(.17,.67,.83,.67), opacity 0.6s ease;
+      z-index: 2;
     }
     .screen.active {
-      transform:translateY(0); opacity:1; pointer-events:auto;
+      transform: translateY(0); opacity: 1; pointer-events: auto;
     }
 
-    /* ==== CARD ==== */
     .card {
-      background:rgba(255,255,255,0.06);
-      backdrop-filter:blur(25px);
-      -webkit-backdrop-filter:blur(25px);
-      border-radius:16px; padding:40px;
-      width:90%; max-width:500px;
-      text-align:center;
-      box-shadow:0 0 25px rgba(0,255,255,0.1);
-      z-index:3;
+      position: relative;
+      background: rgba(15, 15, 15, 0.1); /* uniform translucent */
+      border-radius: 20px;
+      overflow: hidden;
+      backdrop-filter: blur(50px);
+      -webkit-backdrop-filter: blur(50px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      padding: 50px 40px;
+      width: 100%;
+      max-width: 480px;
+      text-align: center;
+      z-index: 3;
     }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: none;
+      pointer-events: none;
+    }
+
     .card h1 {
-      margin-bottom:20px; font-size:36px;
-      background:linear-gradient(to right,#00ffff,#7289da);
-      -webkit-background-clip:text;
-      background-clip:text; color:transparent;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      font-size: 38px;
+      font-weight: 600;
+      background: linear-gradient(to right, #00ffff, #7289da);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
     }
 
-    /* ==== FORM FIELDS ==== */
+    .card h1::before {
+      content: "🔐";
+      font-size: 34px;
+      color: #00ffff;
+    }
+
     .card form {
-      display:flex; flex-direction:column; gap:16px;
-    }
-    .card input {
-      padding:12px; font-size:18px;
-      border:none; border-radius:8px;
-      background:#ffffff12; color:white;
-      backdrop-filter:blur(10px);
-      outline:none; transition:border 0.2s ease;
-    }
-    .card input:focus {
-      border:2px solid #7289da;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
     }
 
-    /* ==== BUTTONS ==== */
+    .card input {
+      padding: 16px;
+      font-size: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      color: white;
+      backdrop-filter: blur(10px);
+      outline: none;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .card input:focus {
+      border-color: #00ffff;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
     .btn {
-      display:block; width:70%; margin:16px auto 0;
-      background:#7289da; color:white; border:none;
-      border-radius:8px; padding:12px 26px;
-      font-size:16px; cursor:pointer;
-      transition:transform 0.3s ease, background 0.3s ease;
+      display: block;
+      width: 80%;
+      margin: 20px auto 0;
+      background: linear-gradient(135deg, #00ffff, #7289da);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      padding: 16px 28px;
+      font-size: 17px;
+      cursor: pointer;
+      transition: transform 0.3s ease, background 0.3s ease;
     }
-    .btn:hover { background:#5b6eae; transform:scale(1.05); }
+
+    .btn:hover {
+      transform: scale(1.05);
+      background: linear-gradient(135deg, #00cccc, #5b6eae);
+    }
+
     .btn.outline {
-      background:transparent; border:2px solid #7289da;
+      background: transparent;
+      border: 2px solid #00ffff;
     }
+
     .btn.outline:hover {
-      background:rgba(114,137,218,0.2);
+      background: rgba(0, 255, 255, 0.1);
+    }
+
+    #toggleMode {
+      display: inline-block;
+      margin-top: 20px;
+      color: #00ffff;
+      font-size: 15px;
+      text-decoration: none;
+    }
+
+    #toggleMode:hover {
+      text-decoration: underline;
+    }
+
+    #toast-container {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 99999;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: rgba(0, 0, 0, 0.85);
+      color: #00ffff;
+      padding: 10px 20px;
+      border-radius: 16px;
+      font-size: 14px;
+      opacity: 1;
+    }
+
+    @keyframes shake {
+      0%,100% { transform: translateX(-50%) translateX(0); }
+      25% { transform: translateX(-50%) translateX(-5px); }
+      75% { transform: translateX(-50%) translateX(5px); }
+    }
+
+    #toast-container.shake {
+      animation: shake 0.5s ease;
     }
   </style>
 </head>
@@ -111,79 +195,79 @@
   <script> const { ipcRenderer } = require('electron'); </script>
   <canvas id="matrixCanvas"></canvas>
 
-  <!-- TITLEBAR -->
   <div class="titlebar">
-    <button class="min"
-            onmouseenter="this.textContent='–'" onmouseleave="this.textContent=''"
-            onclick="ipcRenderer.send('window-control','min')"></button>
-    <button class="max"
-            onmouseenter="this.textContent='▢'" onmouseleave="this.textContent=''"
-            onclick="ipcRenderer.send('window-control','max')"></button>
-    <button class="close"
-            onmouseenter="this.textContent='✕'" onmouseleave="this.textContent=''"
-            onclick="ipcRenderer.send('window-control','close')"></button>
+    <button class="min" onmouseenter="this.textContent='–'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','min')"></button>
+    <button class="max" onmouseenter="this.textContent='▢'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','max')"></button>
+    <button class="close" onmouseenter="this.textContent='✕'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','close')"></button>
   </div>
 
-  <!-- LOGIN SCREEN -->
   <div id="login-screen" class="screen active">
     <div class="card">
-      <h1>🔐 Password Helper</h1>
+      <h1>Password Helper</h1>
       <form id="loginForm" data-mode="login">
-        <input type="email"   id="email"    placeholder="Email"    required />
+        <input type="email" id="email" placeholder="Email" required />
         <input type="password" id="password" placeholder="Password" required />
         <button type="submit" class="btn">Log In</button>
       </form>
       <button id="skipBtn" class="btn outline">Skip for now</button>
-      <div style="margin-top:16px;">
-        <a href="#" id="toggleMode" style="color:#00ffff;">Create account</a>
-      </div>
+      <a href="#" id="toggleMode">Create account</a>
     </div>
   </div>
 
-  <script>
-    // MATRIX EFFECT
-    const canvas = document.getElementById('matrixCanvas'),
-          ctx    = canvas.getContext('2d'),
-          size   = 14;
-    let cols, drops;
-    const chars = "アァイィウエェカキクケコサシスセソタチツテトナニヌネノ0123456789".split("");
-    function initMatrix(){
-      canvas.width = innerWidth;
-      canvas.height = innerHeight;
-      cols = Math.floor(canvas.width / size);
-      drops = Array(cols).fill(1);
-    }
-    function drawMatrix(){
-      ctx.fillStyle='rgba(0,0,0,0.05)';
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-      ctx.fillStyle='#0f0'; ctx.font=`${size}px monospace`;
-      drops.forEach((y,i)=>{
-        const c = chars[Math.floor(Math.random()*chars.length)];
-        ctx.fillText(c, i*size, y*size);
-        drops[i] = (y*size > canvas.height && Math.random()>0.975) ? 0 : y+1;
-      });
-    }
-    initMatrix(); setInterval(drawMatrix, 33);
-    window.addEventListener('resize', initMatrix);
+  <div id="toast-container"></div>
 
-    // FADE-IN & SWIPE-IN ANIMATION
+  <script>
+    const toastCt = document.getElementById('toast-container');
+    const form = document.getElementById('loginForm');
+    const inputs = form.querySelectorAll('input');
+    const skip = document.getElementById('skipBtn');
+    const toggle = document.getElementById('toggleMode');
+
+    function showOfflineToast() {
+      toastCt.innerHTML = '';
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.textContent = '⚠️ No internet — login disabled.';
+      toastCt.appendChild(t);
+    }
+
+    function hideOfflineToast() {
+      toastCt.innerHTML = '';
+    }
+
+    function checkOnlineStatus() {
+      if (!navigator.onLine) {
+        showOfflineToast();
+      } else {
+        hideOfflineToast();
+      }
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
-      requestAnimationFrame(() => document.body.classList.add('loaded'));
-      // slightly delay for smoother reveal
-      setTimeout(() => {
-        document.getElementById('login-screen').classList.add('active');
-      }, 200);
+      checkOnlineStatus();
     });
 
-    // LOGIN / SKIP / TOGGLE
-    const form   = document.getElementById('loginForm'),
-          skip   = document.getElementById('skipBtn'),
-          toggle = document.getElementById('toggleMode');
+    window.addEventListener('online', checkOnlineStatus);
+    window.addEventListener('offline', checkOnlineStatus);
+
+    inputs.forEach(inp => {
+      inp.addEventListener('beforeinput', e => {
+        if (!navigator.onLine) {
+          e.preventDefault();
+          toastCt.classList.add('shake');
+          setTimeout(() => toastCt.classList.remove('shake'), 500);
+        }
+      });
+    });
 
     form.onsubmit = e => {
       e.preventDefault();
-      // TODO: call /login or /register on your server
-      // on success: transitionTo('index.html');
+      if (!navigator.onLine) {
+        toastCt.classList.add('shake');
+        setTimeout(() => toastCt.classList.remove('shake'), 500);
+        return;
+      }
+      // Proceed with login
     };
 
     skip.onclick = () => transitionTo('index.html');
@@ -201,10 +285,40 @@
       }
     };
 
-    function transitionTo(url){
+    function transitionTo(url) {
       document.body.classList.remove('loaded');
-      setTimeout(()=>{ window.location.href = url; }, 500);
+      setTimeout(() => { window.location.href = url; }, 500);
     }
+
+    const canvas = document.getElementById('matrixCanvas'),
+          ctx = canvas.getContext('2d'),
+          size = 14;
+    let cols, drops;
+    const chars = "アァイィウエェカキクケコサシスセソタチツテトナニヌネノ0123456789".split("");
+    function initMatrix() {
+      canvas.width = innerWidth;
+      canvas.height = innerHeight;
+      cols = Math.floor(canvas.width / size);
+      drops = Array(cols).fill(1);
+    }
+    function drawMatrix() {
+      ctx.fillStyle = 'rgba(0,0,0,0.05)';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = '#0f0';
+      ctx.font = `${size}px monospace`;
+      drops.forEach((y,i)=>{
+        const c = chars[Math.floor(Math.random()*chars.length)];
+        ctx.fillText(c, i*size, y*size);
+        drops[i] = (y*size > canvas.height && Math.random()>0.975) ? 0 : y+1;
+      });
+    }
+    initMatrix();
+    setInterval(drawMatrix, 33);
+    window.addEventListener('resize', initMatrix);
+    window.addEventListener('load', () => {
+      requestAnimationFrame(() => document.body.classList.add('loaded'));
+      setTimeout(() => document.getElementById('login-screen').classList.add('active'), 200);
+    });
   </script>
 </body>
 </html>
