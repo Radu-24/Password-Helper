@@ -58,25 +58,21 @@
 
     .card {
       position: relative;
-      background: rgba(15, 15, 15, 0.1); /* uniform translucent */
+      background: rgba(15, 15, 15, 0.1);
       border-radius: 20px;
       overflow: hidden;
       backdrop-filter: blur(50px);
-      -webkit-backdrop-filter: blur(50px);
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-      padding: 50px 40px;
       width: 100%;
       max-width: 480px;
       text-align: center;
-      z-index: 3;
+      transition: height 0.4s ease, padding 0.4s ease;
+      padding: 50px 40px;
+      height: 460px; /* Marime default mai mare */
     }
 
-    .card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: none;
-      pointer-events: none;
+    .card.expanded {
+      height: 600px; /* Extindere cand faci cont */
     }
 
     .card h1 {
@@ -96,25 +92,25 @@
     .card h1::before {
       content: "🔐";
       font-size: 34px;
-      color: #00ffff;
     }
 
     .card form {
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 12px;
     }
 
     .card input {
       padding: 16px;
       font-size: 18px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0);
       border-radius: 14px;
       background: rgba(255, 255, 255, 0.05);
       color: white;
       backdrop-filter: blur(10px);
       outline: none;
       transition: border-color 0.2s ease, background 0.2s ease;
+      width: 100%;
     }
 
     .card input:focus {
@@ -122,10 +118,43 @@
       background: rgba(255, 255, 255, 0.1);
     }
 
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-wrapper img {
+      position: absolute;
+      top: 50%;
+      right: 14px;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      opacity: 0.7;
+    }
+
+    #passwordRequirements {
+      list-style: none;
+      text-align: left;
+      margin-top: 8px;
+      padding-left: 5px;
+      font-size: 12px;
+      color: #aaa;
+      opacity: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: opacity 0.4s ease, max-height 0.4s ease;
+    }
+
+    #passwordRequirements.active {
+      opacity: 0.8;
+      max-height: 150px;
+    }
+
     .btn {
       display: block;
       width: 80%;
-      margin: 20px auto 0;
+      margin: 15px auto 0;
       background: linear-gradient(135deg, #00ffff, #7289da);
       color: white;
       border: none;
@@ -134,6 +163,7 @@
       font-size: 17px;
       cursor: pointer;
       transition: transform 0.3s ease, background 0.3s ease;
+      box-shadow: 0 0 15px rgba(0,255,255,0.3);
     }
 
     .btn:hover {
@@ -152,7 +182,7 @@
 
     #toggleMode {
       display: inline-block;
-      margin-top: 20px;
+      margin-top: 15px;
       color: #00ffff;
       font-size: 15px;
       text-decoration: none;
@@ -177,7 +207,6 @@
       padding: 10px 20px;
       border-radius: 16px;
       font-size: 14px;
-      opacity: 1;
     }
 
     @keyframes shake {
@@ -192,133 +221,169 @@
   </style>
 </head>
 <body>
-  <script> const { ipcRenderer } = require('electron'); </script>
-  <canvas id="matrixCanvas"></canvas>
+<script> const { ipcRenderer } = require('electron'); </script>
+<canvas id="matrixCanvas"></canvas>
 
-  <div class="titlebar">
-    <button class="min" onmouseenter="this.textContent='–'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','min')"></button>
-    <button class="max" onmouseenter="this.textContent='▢'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','max')"></button>
-    <button class="close" onmouseenter="this.textContent='✕'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','close')"></button>
+<div class="titlebar">
+  <button class="min" onmouseenter="this.textContent='–'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','min')"></button>
+  <button class="max" onmouseenter="this.textContent='▢'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','max')"></button>
+  <button class="close" onmouseenter="this.textContent='✕'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','close')"></button>
+</div>
+
+<div id="login-screen" class="screen active">
+  <div class="card" id="card">
+    <h1>Password Helper</h1>
+    <form id="loginForm" data-mode="login">
+      <input type="email" id="email" placeholder="Email" required />
+      <div class="input-wrapper">
+        <input type="password" id="password" placeholder="Password" required style="padding-right: 40px;">
+        <img id="togglePassword" src="icons/eye-slash.png" alt="Toggle">
+      </div>
+
+      <ul id="passwordRequirements">
+        <li id="req-length">• At least 8 characters</li>
+        <li id="req-upper">• At least 1 uppercase</li>
+        <li id="req-lower">• At least 1 lowercase</li>
+        <li id="req-digit">• At least 1 number</li>
+        <li id="req-special">• At least 1 special character</li>
+      </ul>
+
+      <button type="submit" class="btn">Log In</button>
+    </form>
+    <button id="skipBtn" class="btn outline">Skip for now</button>
+    <a href="#" id="toggleMode">Create account</a>
   </div>
+</div>
 
-  <div id="login-screen" class="screen active">
-    <div class="card">
-      <h1>Password Helper</h1>
-      <form id="loginForm" data-mode="login">
-        <input type="email" id="email" placeholder="Email" required />
-        <input type="password" id="password" placeholder="Password" required />
-        <button type="submit" class="btn">Log In</button>
-      </form>
-      <button id="skipBtn" class="btn outline">Skip for now</button>
-      <a href="#" id="toggleMode">Create account</a>
-    </div>
-  </div>
+<div id="toast-container"></div>
 
-  <div id="toast-container"></div>
+<script>
+const toastCt = document.getElementById('toast-container');
+const form = document.getElementById('loginForm');
+const inputs = form.querySelectorAll('input');
+const skip = document.getElementById('skipBtn');
+const toggle = document.getElementById('toggleMode');
+const togglePass = document.getElementById('togglePassword');
+const passInput = document.getElementById('password');
+const requirements = document.getElementById('passwordRequirements');
+const card = document.getElementById('card');
 
-  <script>
-    const toastCt = document.getElementById('toast-container');
-    const form = document.getElementById('loginForm');
-    const inputs = form.querySelectorAll('input');
-    const skip = document.getElementById('skipBtn');
-    const toggle = document.getElementById('toggleMode');
+const reqs = {
+  length: document.getElementById('req-length'),
+  upper: document.getElementById('req-upper'),
+  lower: document.getElementById('req-lower'),
+  digit: document.getElementById('req-digit'),
+  special: document.getElementById('req-special')
+};
 
-    function showOfflineToast() {
-      toastCt.innerHTML = '';
-      const t = document.createElement('div');
-      t.className = 'toast';
-      t.textContent = '⚠️ No internet — login disabled.';
-      toastCt.appendChild(t);
-    }
+togglePass.onclick = () => {
+  if (passInput.type === 'password') {
+    passInput.type = 'text';
+    togglePass.src = 'icons/eye.png';
+  } else {
+    passInput.type = 'password';
+    togglePass.src = 'icons/eye-slash.png';
+  }
+};
 
-    function hideOfflineToast() {
-      toastCt.innerHTML = '';
-    }
+passInput.addEventListener('input', () => {
+  if (form.dataset.mode !== 'register') return;
+  const val = passInput.value;
+  reqs.length.style.color = val.length >= 8 ? '#00ffff' : '#aaa';
+  reqs.upper.style.color = /[A-Z]/.test(val) ? '#00ffff' : '#aaa';
+  reqs.lower.style.color = /[a-z]/.test(val) ? '#00ffff' : '#aaa';
+  reqs.digit.style.color = /\d/.test(val) ? '#00ffff' : '#aaa';
+  reqs.special.style.color = /[^A-Za-z0-9]/.test(val) ? '#00ffff' : '#aaa';
+});
 
-    function checkOnlineStatus() {
-      if (!navigator.onLine) {
-        showOfflineToast();
-      } else {
-        hideOfflineToast();
-      }
-    }
+toggle.onclick = e => {
+  e.preventDefault();
+  if (form.dataset.mode === 'login') {
+    form.dataset.mode = 'register';
+    form.querySelector('button').textContent = 'Register';
+    toggle.textContent = 'Already have an account? Log In';
+    card.classList.add('expanded');
+    requirements.classList.add('active');
+  } else {
+    form.dataset.mode = 'login';
+    form.querySelector('button').textContent = 'Log In';
+    toggle.textContent = 'Create account';
+    card.classList.remove('expanded');
+    requirements.classList.remove('active');
+  }
+};
 
-    window.addEventListener('DOMContentLoaded', () => {
-      checkOnlineStatus();
-    });
+function showOfflineToast() {
+  toastCt.innerHTML = '<div class="toast">⚠️ No internet — login disabled.</div>';
+}
 
-    window.addEventListener('online', checkOnlineStatus);
-    window.addEventListener('offline', checkOnlineStatus);
+function hideOfflineToast() {
+  toastCt.innerHTML = '';
+}
 
-    inputs.forEach(inp => {
-      inp.addEventListener('beforeinput', e => {
-        if (!navigator.onLine) {
-          e.preventDefault();
-          toastCt.classList.add('shake');
-          setTimeout(() => toastCt.classList.remove('shake'), 500);
-        }
-      });
-    });
+function checkOnlineStatus() {
+  if (!navigator.onLine) showOfflineToast();
+  else hideOfflineToast();
+}
 
-    form.onsubmit = e => {
+window.addEventListener('DOMContentLoaded', checkOnlineStatus);
+window.addEventListener('online', checkOnlineStatus);
+window.addEventListener('offline', checkOnlineStatus);
+
+inputs.forEach(inp => {
+  inp.addEventListener('beforeinput', e => {
+    if (!navigator.onLine) {
       e.preventDefault();
-      if (!navigator.onLine) {
-        toastCt.classList.add('shake');
-        setTimeout(() => toastCt.classList.remove('shake'), 500);
-        return;
-      }
-      // Proceed with login
-    };
-
-    skip.onclick = () => transitionTo('index.html');
-
-    toggle.onclick = e => {
-      e.preventDefault();
-      if (form.dataset.mode === 'login') {
-        form.dataset.mode = 'register';
-        form.querySelector('button').textContent = 'Register';
-        toggle.textContent = 'Already have an account? Log In';
-      } else {
-        form.dataset.mode = 'login';
-        form.querySelector('button').textContent = 'Log In';
-        toggle.textContent = 'Create account';
-      }
-    };
-
-    function transitionTo(url) {
-      document.body.classList.remove('loaded');
-      setTimeout(() => { window.location.href = url; }, 500);
+      toastCt.classList.add('shake');
+      setTimeout(() => toastCt.classList.remove('shake'), 500);
     }
+  });
+});
 
-    const canvas = document.getElementById('matrixCanvas'),
-          ctx = canvas.getContext('2d'),
-          size = 14;
-    let cols, drops;
-    const chars = "アァイィウエェカキクケコサシスセソタチツテトナニヌネノ0123456789".split("");
-    function initMatrix() {
-      canvas.width = innerWidth;
-      canvas.height = innerHeight;
-      cols = Math.floor(canvas.width / size);
-      drops = Array(cols).fill(1);
-    }
-    function drawMatrix() {
-      ctx.fillStyle = 'rgba(0,0,0,0.05)';
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-      ctx.fillStyle = '#0f0';
-      ctx.font = `${size}px monospace`;
-      drops.forEach((y,i)=>{
-        const c = chars[Math.floor(Math.random()*chars.length)];
-        ctx.fillText(c, i*size, y*size);
-        drops[i] = (y*size > canvas.height && Math.random()>0.975) ? 0 : y+1;
-      });
-    }
-    initMatrix();
-    setInterval(drawMatrix, 33);
-    window.addEventListener('resize', initMatrix);
-    window.addEventListener('load', () => {
-      requestAnimationFrame(() => document.body.classList.add('loaded'));
-      setTimeout(() => document.getElementById('login-screen').classList.add('active'), 200);
-    });
-  </script>
+form.onsubmit = e => {
+  e.preventDefault();
+  if (!navigator.onLine) {
+    toastCt.classList.add('shake');
+    setTimeout(() => toastCt.classList.remove('shake'), 500);
+    return;
+  }
+  // Login/Register logic
+};
+
+skip.onclick = () => transitionTo('index.html');
+
+function transitionTo(url) {
+  document.body.classList.remove('loaded');
+  setTimeout(() => { window.location.href = url; }, 500);
+}
+
+// Matrix
+const canvas = document.getElementById('matrixCanvas'), ctx = canvas.getContext('2d');
+const size = 14; let cols, drops;
+const chars = "アァイィウエェカキクケコサシスセソタチツテトナニヌネノ0123456789".split("");
+function initMatrix() {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+  cols = Math.floor(canvas.width / size);
+  drops = Array(cols).fill(1);
+}
+function drawMatrix() {
+  ctx.fillStyle = 'rgba(0,0,0,0.05)';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = '#0f0';
+  ctx.font = `${size}px monospace`;
+  drops.forEach((y,i)=>{
+    const c = chars[Math.floor(Math.random()*chars.length)];
+    ctx.fillText(c, i*size, y*size);
+    drops[i] = (y*size > canvas.height && Math.random()>0.975) ? 0 : y+1;
+  });
+}
+initMatrix();
+setInterval(drawMatrix, 33);
+window.addEventListener('resize', initMatrix);
+window.addEventListener('load', () => {
+  requestAnimationFrame(() => document.body.classList.add('loaded'));
+});
+</script>
 </body>
 </html>
