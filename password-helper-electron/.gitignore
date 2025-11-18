@@ -1,0 +1,9 @@
+# Node modules
+node_modules/
+
+# Package manifests
+package.json
+package-lock.json
+
+# Optional: ignore environment files
+.env

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="stylesheet" href="titlebar.css">
   <meta charset="UTF-8" />
   <title>Password Helper – Login</title>
   <style>
@@ -38,7 +39,6 @@
       border: none; border-radius: 50%;
       cursor: pointer;
       background: transparent;
-      display: flex; align-items: center; justify-content: center;
     }
     .titlebar .min { background: #ffbd2e; }
     .titlebar .max { background: #27c93f; }
@@ -58,22 +58,24 @@
 
     .card {
       position: relative;
-      background: rgba(15, 15, 15, 0.1);
+      background: rgba(30, 30, 30, 0.4);
       border-radius: 20px;
       overflow: hidden;
       backdrop-filter: blur(50px);
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.5),
+        inset 0 0 30px rgba(255, 255, 255, 0.05),
+        inset 0 0 10px rgba(0, 0, 0, 0.2);
       width: 100%;
       max-width: 480px;
       text-align: center;
       transition: height 0.4s ease, padding 0.4s ease;
       padding: 50px 40px;
-      height: 460px; /* Marime default mai mare */
+      height: 460px; 
     }
 
-    .card.expanded {
-      height: 600px; /* Extindere cand faci cont */
-    }
+    .card.expanded { height: 600px; }
+    .card.register { padding-top: 40px; }
 
     .card h1 {
       display: flex;
@@ -197,8 +199,10 @@
       bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       z-index: 99999;
-      pointer-events: none;
     }
 
     .toast {
@@ -207,37 +211,66 @@
       padding: 10px 20px;
       border-radius: 16px;
       font-size: 14px;
+      margin-top: 8px;
+      opacity: 1;
+      transform: translateY(0);
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    .toast.shake {
+      animation: shake 0.5s ease;
+    }
+
+    .toast.fade-out {
+      opacity: 0;
+      transform: translateY(-10px);
     }
 
     @keyframes shake {
-      0%,100% { transform: translateX(-50%) translateX(0); }
-      25% { transform: translateX(-50%) translateX(-5px); }
-      75% { transform: translateX(-50%) translateX(5px); }
-    }
-
-    #toast-container.shake {
-      animation: shake 0.5s ease;
+      0%,100% { transform: translateY(0) translateX(0); }
+      25% { transform: translateY(0) translateX(-5px); }
+      75% { transform: translateY(0) translateX(5px); }
     }
   </style>
 </head>
 <body>
+  <div id="titlebar-container"></div>
+<script>
+  fetch('titlebar.html')
+    .then(res => res.text())
+    .then(html => {
+      document.getElementById('titlebar-container').innerHTML = html;
+    });
+
+  function windowControl(action) {
+    const { ipcRenderer } = require('electron');
+    ipcRenderer.send('window-control', action);
+  }
+</script>
+
 <script> const { ipcRenderer } = require('electron'); </script>
 <canvas id="matrixCanvas"></canvas>
 
 <div class="titlebar">
-  <button class="min" onmouseenter="this.textContent='–'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','min')"></button>
-  <button class="max" onmouseenter="this.textContent='▢'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','max')"></button>
-  <button class="close" onmouseenter="this.textContent='✕'" onmouseleave="this.textContent=''" onclick="ipcRenderer.send('window-control','close')"></button>
+  <button class="min" onclick="ipcRenderer.send('window-control','min')"></button>
+  <button class="max" onclick="ipcRenderer.send('window-control','max')"></button>
+  <button class="close" onclick="ipcRenderer.send('window-control','close')"></button>
 </div>
 
-<div id="login-screen" class="screen active">
+<div class="screen active">
   <div class="card" id="card">
     <h1>Password Helper</h1>
     <form id="loginForm" data-mode="login">
       <input type="email" id="email" placeholder="Email" required />
+      
       <div class="input-wrapper">
         <input type="password" id="password" placeholder="Password" required style="padding-right: 40px;">
         <img id="togglePassword" src="icons/eye-slash.png" alt="Toggle">
+      </div>
+
+      <div class="input-wrapper" id="confirmWrapper" style="display:none;">
+        <input type="password" id="confirmPassword" placeholder="Confirm Password" required style="padding-right: 40px;">
+        <img id="toggleConfirmPassword" src="icons/eye-slash.png" alt="Toggle">
       </div>
 
       <ul id="passwordRequirements">
@@ -260,13 +293,30 @@
 <script>
 const toastCt = document.getElementById('toast-container');
 const form = document.getElementById('loginForm');
-const inputs = form.querySelectorAll('input');
-const skip = document.getElementById('skipBtn');
 const toggle = document.getElementById('toggleMode');
 const togglePass = document.getElementById('togglePassword');
 const passInput = document.getElementById('password');
 const requirements = document.getElementById('passwordRequirements');
 const card = document.getElementById('card');
+const confirmWrapper = document.getElementById('confirmWrapper');
+const confirmInput = document.getElementById('confirmPassword');
+const toggleConfirm = document.getElementById('toggleConfirmPassword');
+
+function showToast(message) {
+  const currentToasts = toastCt.querySelectorAll('.toast');
+  if (currentToasts.length >= 2) return;
+
+  const t = document.createElement('div');
+  t.className = 'toast shake';
+  t.textContent = message;
+  toastCt.appendChild(t);
+
+  setTimeout(() => t.classList.remove('shake'), 500);
+  setTimeout(() => {
+    t.classList.add('fade-out');
+    setTimeout(() => t.remove(), 300);
+  }, 3000);
+}
 
 const reqs = {
   length: document.getElementById('req-length'),
@@ -277,13 +327,13 @@ const reqs = {
 };
 
 togglePass.onclick = () => {
-  if (passInput.type === 'password') {
-    passInput.type = 'text';
-    togglePass.src = 'icons/eye.png';
-  } else {
-    passInput.type = 'password';
-    togglePass.src = 'icons/eye-slash.png';
-  }
+  passInput.type = (passInput.type === 'password') ? 'text' : 'password';
+  togglePass.src = (passInput.type === 'password') ? 'icons/eye-slash.png' : 'icons/eye.png';
+};
+
+toggleConfirm.onclick = () => {
+  confirmInput.type = (confirmInput.type === 'password') ? 'text' : 'password';
+  toggleConfirm.src = (confirmInput.type === 'password') ? 'icons/eye-slash.png' : 'icons/eye.png';
 };
 
 passInput.addEventListener('input', () => {
@@ -302,62 +352,51 @@ toggle.onclick = e => {
     form.dataset.mode = 'register';
     form.querySelector('button').textContent = 'Register';
     toggle.textContent = 'Already have an account? Log In';
-    card.classList.add('expanded');
+    card.classList.add('expanded', 'register');
     requirements.classList.add('active');
+    confirmWrapper.style.display = 'block';
   } else {
     form.dataset.mode = 'login';
     form.querySelector('button').textContent = 'Log In';
     toggle.textContent = 'Create account';
-    card.classList.remove('expanded');
+    card.classList.remove('expanded', 'register');
     requirements.classList.remove('active');
+    confirmWrapper.style.display = 'none';
   }
 };
-
-function showOfflineToast() {
-  toastCt.innerHTML = '<div class="toast">⚠️ No internet — login disabled.</div>';
-}
-
-function hideOfflineToast() {
-  toastCt.innerHTML = '';
-}
-
-function checkOnlineStatus() {
-  if (!navigator.onLine) showOfflineToast();
-  else hideOfflineToast();
-}
-
-window.addEventListener('DOMContentLoaded', checkOnlineStatus);
-window.addEventListener('online', checkOnlineStatus);
-window.addEventListener('offline', checkOnlineStatus);
-
-inputs.forEach(inp => {
-  inp.addEventListener('beforeinput', e => {
-    if (!navigator.onLine) {
-      e.preventDefault();
-      toastCt.classList.add('shake');
-      setTimeout(() => toastCt.classList.remove('shake'), 500);
-    }
-  });
-});
 
 form.onsubmit = e => {
   e.preventDefault();
+
   if (!navigator.onLine) {
-    toastCt.classList.add('shake');
-    setTimeout(() => toastCt.classList.remove('shake'), 500);
+    showToast('⚠️ No internet — login disabled.');
     return;
   }
-  // Login/Register logic
+
+  if (form.dataset.mode === 'register') {
+    const val = passInput.value;
+    const isWeak = val.length < 8 ||
+      !/[A-Z]/.test(val) ||
+      !/[a-z]/.test(val) ||
+      !/\d/.test(val) ||
+      !/[^A-Za-z0-9]/.test(val);
+
+    const notMatch = val !== confirmInput.value;
+
+    if (isWeak) showToast('❗ Password too weak.');
+    if (notMatch) showToast('❗ Passwords do not match.');
+
+    if (isWeak || notMatch) return;
+  }
+
+  showToast('✅ Form submitted! (Mock)');
 };
 
-skip.onclick = () => transitionTo('index.html');
-
-function transitionTo(url) {
+document.getElementById('skipBtn').onclick = () => {
   document.body.classList.remove('loaded');
-  setTimeout(() => { window.location.href = url; }, 500);
-}
+  setTimeout(() => { window.location.href = 'index.html'; }, 500);
+};
 
-// Matrix
 const canvas = document.getElementById('matrixCanvas'), ctx = canvas.getContext('2d');
 const size = 14; let cols, drops;
 const chars = "アァイィウエェカキクケコサシスセソタチツテトナニヌネノ0123456789".split("");
@@ -385,5 +424,3 @@ window.addEventListener('load', () => {
   requestAnimationFrame(() => document.body.classList.add('loaded'));
 });
 </script>
-</body>
-</html>
