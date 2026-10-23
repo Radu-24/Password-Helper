@@ -155,7 +155,44 @@ test('add / update / remove persist and validate input', async (t) => {
   store.lock();
   const reopened = new VaultStore({ filePath });
   await reopened.unlock(MASTER);
-  assert.deepEqual(reopened.list().map((e) => e.label), ['renamed.com']);
+  assert.deepEqual(reopened.activeEntries().map((e) => e.label), ['renamed.com']);
+  assert.deepEqual(reopened.list().map((e) => [e.label, Boolean(e.deletedAt)]), [['renamed.com', false], ['padded', true]]);
+});
+
+test('deleted items go to Recently Deleted, can be recovered, and expire after 30 days', async (t) => {
+  let now = Date.parse('2026-10-01T12:00:00Z');
+  const { store, filePath } = tempVault(t, { now: () => now });
+  await store.create(MASTER);
+  const keep = await store.add(sample({ label: 'keep' }));
+  const gone = await store.add(sample({ label: 'gone', password: 'other-pass' }));
+
+  const deleted = await store.remove(gone.id);
+  assert.equal(deleted.deletedAt, '2026-10-01T12:00:00.000Z');
+  assert.deepEqual(store.activeEntries().map((e) => e.label), ['keep']);
+  await rejectsWithCode(store.update(gone.id, sample()), 'INVALID');
+  await rejectsWithCode(store.setFavorite(gone.id, true), 'INVALID');
+  assert.equal(store.getEntry(gone.id).password, 'other-pass', 'deleted items can still be viewed');
+
+  assert.equal((await store.restore(gone.id)).deletedAt, null);
+  await store.remove(gone.id);
+  await store.remove(keep.id);
+  assert.equal(await store.emptyTrash(), 2);
+  assert.equal(store.list().length, 0);
+
+  // Expiry: an item deleted 31 days ago is dropped at the next unlock.
+  const old = await store.add(sample({ label: 'old' }));
+  const recent = await store.add(sample({ label: 'recent', password: 'x' }));
+  await store.remove(old.id);
+  now += 2 * 24 * 60 * 60 * 1000;
+  await store.remove(recent.id);
+  now += 29.5 * 24 * 60 * 60 * 1000;
+  store.lock();
+  const reopened = new VaultStore({ filePath, now: () => now });
+  await reopened.unlock(MASTER);
+  assert.deepEqual(reopened.list().map((e) => e.label), ['recent']);
+  await rejectsWithCode(reopened.purge('missing'), 'NOT_FOUND');
+  await reopened.purge(recent.id);
+  assert.equal(reopened.list().length, 0);
 });
 
 test('a locked vault refuses every operation', async (t) => {
@@ -245,4 +282,86 @@ test('creating twice or unlocking nothing fails cleanly', async (t) => {
   await store.create(MASTER);
   await rejectsWithCode(store.create(MASTER), 'VAULT_EXISTS');
   await rejectsWithCode(new VaultStore({ filePath }).unlock(''), 'WRONG_PASSWORD');
+});
+
+test('web addresses are normalised and only http(s) is accepted', async (t) => {
+  const { store } = tempVault(t);
+  await store.create(MASTER);
+  const a = await store.add(sample({ url: 'github.com/login' }));
+  assert.equal(a.url, 'https://github.com/login');
+  const b = await store.add(sample({ label: 'local', url: 'http://localhost:8080' }));
+  assert.equal(b.url, 'http://localhost:8080/');
+  assert.equal((await store.add(sample({ label: 'none', url: '  ' }))).url, '');
+  for (const url of ['ftp://files.example.com', 'javascript:alert(1)', 'not a url', 'intranet', 'x'.repeat(2049)]) {
+    await rejectsWithCode(store.add(sample({ url })), 'INVALID');
+  }
+});
+
+test('favourites persist and do not change "last modified"', async (t) => {
+  const { store, filePath } = tempVault(t);
+  await store.create(MASTER);
+  const entry = await store.add(sample());
+  const starred = await store.setFavorite(entry.id, true);
+  assert.equal(starred.favorite, true);
+  assert.equal(starred.updatedAt, entry.updatedAt);
+  // Editing without sending `favorite` keeps it.
+  assert.equal((await store.update(entry.id, sample({ label: 'renamed' }))).favorite, true);
+  await rejectsWithCode(store.setFavorite('missing', true), 'NOT_FOUND');
+  store.lock();
+  const reopened = new VaultStore({ filePath });
+  await reopened.unlock(MASTER);
+  assert.equal(reopened.list()[0].favorite, true);
+});
+
+test('2FA secrets are stored encrypted and never listed', async (t) => {
+  const { store, filePath } = tempVault(t);
+  await store.create(MASTER);
+  const link = 'otpauth://totp/GitHub:radu?secret=JBSWY3DPEHPK3PXP&issuer=GitHub';
+  const entry = await store.add(sample({ totp: link }));
+  assert.equal(entry.hasTotp, true);
+  assert.equal('totp' in entry, false, 'add() must not return the secret');
+  assert.equal('totp' in store.list()[0], false, 'list() must not expose the secret');
+  assert.equal(fs.readFileSync(filePath, 'utf8').includes('JBSWY3DP'), false, 'no plaintext secret on disk');
+
+  const editable = store.getEditable(entry.id);
+  assert.equal(editable.password, 'S3cret-Pass!');
+  assert.equal('totp' in editable, false);
+  assert.deepEqual(editable.totpInfo, { issuer: 'GitHub', account: 'radu', digits: 6, period: 30, algorithm: 'SHA1' });
+
+  // Saving the form without a `totp` field keeps the setup; null removes it.
+  await store.update(entry.id, sample({ label: 'GitHub' }));
+  assert.equal(store.getEntry(entry.id).totp.secret, 'JBSWY3DPEHPK3PXP');
+  store.lock();
+  const reopened = new VaultStore({ filePath });
+  await reopened.unlock(MASTER);
+  assert.equal(reopened.getEntry(entry.id).totp.issuer, 'GitHub');
+  await reopened.update(entry.id, sample({ totp: null }));
+  assert.equal(reopened.getEntry(entry.id).totp, null);
+  assert.equal(reopened.list()[0].hasTotp, false);
+  await rejectsWithCode(reopened.update(entry.id, sample({ totp: 'not a key' })), 'INVALID');
+});
+
+test('entries from older versions get the new fields', async (t) => {
+  const { store } = tempVault(t);
+  await store.create(MASTER, [{ label: 'old', user: 'u', pass: 'p' }]);
+  const [entry] = store.list();
+  assert.equal(entry.url, '');
+  assert.equal(entry.favorite, false);
+  assert.equal(entry.hasTotp, false);
+});
+
+test('imports keep valid 2FA setups and move a bad address into the notes', async (t) => {
+  const { store } = tempVault(t);
+  await store.create(MASTER);
+  const result = await store.importEntries([
+    { label: 'A', username: 'u', password: 'p1', url: 'a.example.com', totp: { secret: 'JBSWY3DPEHPK3PXP', digits: 6, period: 30, algorithm: 'SHA1' } },
+    { label: 'B', username: 'u', password: 'p2', url: 'android://com.example.app', notes: 'note', totp: 'garbage' },
+  ]);
+  assert.deepEqual(result, { added: 2, skipped: 0 });
+  const [a, b] = store.list();
+  assert.equal(a.url, 'https://a.example.com/');
+  assert.equal(a.hasTotp, true);
+  assert.equal(b.url, '');
+  assert.equal(b.notes, 'note\nAddress: android://com.example.app');
+  assert.equal(b.hasTotp, false, 'a broken 2FA setup is dropped, not fatal');
 });

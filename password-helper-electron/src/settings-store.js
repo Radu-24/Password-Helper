@@ -10,6 +10,9 @@ const { writeFileAtomic } = require('./vault-store');
 
 const AUTO_LOCK_CHOICES = Object.freeze([0, 1, 5, 15, 30, 60]); // minutes, 0 = never
 const CLIPBOARD_CHOICES = Object.freeze([0, 15, 30, 60, 120]); // seconds, 0 = never
+const ACCENTS = Object.freeze(['blue', 'cyan', 'purple', 'pink', 'red', 'orange', 'yellow', 'green', 'graphite']);
+/** Sidebar destinations the app may reopen at startup. */
+const VIEWS = Object.freeze(['analyzer', 'generator', 'items', 'favorites', 'codes', 'security', 'deleted', 'settings']);
 
 const DEFAULTS = Object.freeze({
   clearAnalyzerOnBack: true,
@@ -20,7 +23,16 @@ const DEFAULTS = Object.freeze({
   lockOnMinimize: false,
   clipboardClearSeconds: 30,
   matrixBackground: true,
+  backgroundIntensity: 70,
+  accent: 'blue',
+  reduceMotion: false,
+  reduceTransparency: false,
   showLoginOnStart: true,
+  onboarded: false,
+  vaultSort: 'name',
+  lastView: 'items',
+  sidebarWidth: 224,
+  sidebarCollapsed: false,
   generator: Object.freeze({
     mode: 'password',
     length: 20,
@@ -64,7 +76,16 @@ const SCHEMA = {
   lockOnMinimize: isBool,
   clipboardClearSeconds: oneOf(CLIPBOARD_CHOICES),
   matrixBackground: isBool,
+  backgroundIntensity: intBetween(0, 100),
+  accent: oneOf(ACCENTS),
+  reduceMotion: isBool,
+  reduceTransparency: isBool,
   showLoginOnStart: isBool,
+  onboarded: isBool,
+  vaultSort: oneOf(['name', 'recent', 'type']),
+  lastView: oneOf(VIEWS),
+  sidebarWidth: intBetween(180, 320),
+  sidebarCollapsed: isBool,
   generator: (value) => value && typeof value === 'object',
   windowBounds: (value) =>
     value === null ||
@@ -172,4 +193,4 @@ class SettingsStore {
   }
 }
 
-module.exports = { SettingsStore, DEFAULTS, AUTO_LOCK_CHOICES, CLIPBOARD_CHOICES, PUBLIC_KEYS };
+module.exports = { SettingsStore, DEFAULTS, AUTO_LOCK_CHOICES, CLIPBOARD_CHOICES, ACCENTS, VIEWS, PUBLIC_KEYS };

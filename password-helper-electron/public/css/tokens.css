@@ -1,0 +1,194 @@
+/* =====================================================================
+   Design tokens — colours, type, materials, radii, motion.
+   Dark appearance only: the matrix rain needs a dark window.
+   ===================================================================== */
+
+/* Inter (OFL) stands in for SF Pro; macOS uses the real system font. */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url('../fonts/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url('../fonts/inter-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* JetBrains Mono (OFL) for secrets: 0/O and l/1/I are easy to tell apart. */
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: block;
+  src: url('../fonts/jetbrains-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: block;
+  src: url('../fonts/jetbrains-mono-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* ---- Type ---- */
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Inter Variable', 'Segoe UI Variable Text', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono Variable', 'Cascadia Mono', Menlo, monospace;
+
+  /* macOS text styles (size / line height / tracking for Inter) */
+  --t-caption: 500 11px/14px var(--font-ui);
+  --t-footnote: 400 11.5px/15px var(--font-ui);
+  --t-subhead: 400 12px/16px var(--font-ui);
+  --t-body: 400 13px/18px var(--font-ui);
+  --t-headline: 600 13px/18px var(--font-ui);
+  --t-title3: 600 15px/20px var(--font-ui);
+  --t-title2: 650 17px/22px var(--font-ui);
+  --t-title1: 700 22px/27px var(--font-ui);
+  --t-large: 700 28px/34px var(--font-ui);
+  --track-tight: -0.012em;
+  --track-display: -0.021em;
+
+  /* ---- Label colours ---- */
+  --label: rgba(255, 255, 255, 0.92);
+  --label-2: rgba(235, 235, 245, 0.62);
+  --label-3: rgba(235, 235, 245, 0.38);
+  --label-4: rgba(235, 235, 245, 0.2);
+
+  /* ---- Fills for controls sitting on glass ---- */
+  --fill-1: rgba(255, 255, 255, 0.16);
+  --fill-2: rgba(255, 255, 255, 0.11);
+  --fill-3: rgba(255, 255, 255, 0.075);
+  --fill-4: rgba(255, 255, 255, 0.045);
+  --separator: rgba(255, 255, 255, 0.085);
+  --separator-strong: rgba(255, 255, 255, 0.15);
+
+  /* ---- System colours (dark appearance) ---- */
+  --red: #ff453a;
+  --orange: #ff9f0a;
+  --yellow: #ffd60a;
+  --green: #30d158;
+  --mint: #63e6e2;
+  --teal: #40c8e0;
+  --cyan: #64d2ff;
+  --blue: #0a84ff;
+  --indigo: #5e5ce6;
+  --purple: #bf5af2;
+  --pink: #ff375f;
+  --brown: #ac8e68;
+  --gray: #8e8e93;
+
+  /* Characters in revealed secrets */
+  --secret-digit: #6ab8ff;
+  --secret-symbol: #ff8a7a;
+
+  /* ---- Accent (set from Settings via [data-accent]) ---- */
+  --accent: var(--blue);
+  --on-accent: #fff;
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
+  --accent-ring: color-mix(in srgb, var(--accent) 60%, transparent);
+  --accent-text: color-mix(in srgb, var(--accent) 82%, white);
+
+  /* ---- Materials ---- */
+  --glass-tint: rgba(16, 18, 19, 0.4);
+  --glass-tint-strong: rgba(26, 28, 29, 0.8);
+  --glass-filter: blur(16px) saturate(145%);
+  --glass-edge: inset 0 0.5px 0 rgba(255, 255, 255, 0.17), inset 0 0 0 0.5px rgba(255, 255, 255, 0.075);
+  --glass-shadow: 0 14px 36px rgba(0, 0, 0, 0.34), 0 2px 8px rgba(0, 0, 0, 0.22);
+  --scrim: rgba(0, 0, 0, 0.38);
+
+  /* ---- Radii: each level fits inside the one above it ---- */
+  --r-pane: 18px;
+  --r-platter: 14px;
+  --r-row: 9px;
+  --r-field: 9px;
+  --r-control: 7px;
+  --r-capsule: 999px;
+
+  /* ---- Spacing (4 pt grid) ---- */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s8: 32px;
+
+  /* ---- Layout ---- */
+  --gap: 8px;
+  --sidebar-w: 224px;
+  --toolbar-h: 52px;
+  --column-w: 660px;
+
+  /* ---- Motion: damped springs as CSS linear() curves ---- */
+  /* smooth: no overshoot */
+  --spring-smooth: linear(0, 0.002 0.83%, 0.0163 2.5%, 0.0416 4.17%, 0.0751 5.83%, 0.1577 9.17%, 0.3671 16.67%, 0.4553 20%, 0.5548 24.17%, 0.6246 27.5%, 0.6857 30.83%, 0.7383 34.17%, 0.7832 37.5%, 0.8297 41.67%, 0.8735 46.67%, 0.9067 51.67%, 0.9351 57.5%, 0.9551 63.33%, 0.9811 76.67%, 0.9958 99.17%, 1);
+  --spring-smooth-d: 490ms;
+  /* snappy: 1.5 % overshoot */
+  --spring-snappy: linear(0, 0.0075 1.67%, 0.0279 3.33%, 0.0585 5%, 0.0972 6.67%, 0.1906 10%, 0.428 17.5%, 0.5287 20.83%, 0.6205 24.17%, 0.7015 27.5%, 0.7713 30.83%, 0.8297 34.17%, 0.8777 37.5%, 0.916 40.83%, 0.9524 45%, 0.978 49.17%, 0.9978 54.17%, 1.01 60%, 1.0147 72.5%, 1.0037 99.17%, 1);
+  --spring-snappy-d: 410ms;
+  /* bouncy: 8 % overshoot */
+  --spring-bouncy: linear(0, 0.0029 0.83%, 0.0243 2.5%, 0.0632 4.17%, 0.1156 5.83%, 0.178 7.5%, 0.2473 9.17%, 0.5089 15%, 0.6162 17.5%, 0.7448 20.83%, 0.8277 23.33%, 0.8979 25.83%, 0.9554 28.33%, 1.0005 30.83%, 1.0434 34.17%, 1.0641 36.67%, 1.0767 39.17%, 1.0832 44.17%, 1.071 50%, 1.0185 65%, 1.0022 72.5%, 0.9931 85%, 0.9959 99.17%, 1);
+  --spring-bouncy-d: 590ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --fast: 150ms;
+}
+
+/* ---- Accent colours (macOS set, plus cyan from the first version of the app) ---- */
+[data-accent='blue'] { --accent: #0a84ff; --on-accent: #fff; }
+[data-accent='cyan'] { --accent: #4fd0ff; --on-accent: #00222e; }
+[data-accent='purple'] { --accent: #bf5af2; --on-accent: #fff; }
+[data-accent='pink'] { --accent: #ff4f87; --on-accent: #fff; }
+[data-accent='red'] { --accent: #ff453a; --on-accent: #fff; }
+[data-accent='orange'] { --accent: #ff9f0a; --on-accent: #2b1700; }
+[data-accent='yellow'] { --accent: #ffd60a; --on-accent: #2b2400; }
+[data-accent='green'] { --accent: #30d158; --on-accent: #00260b; }
+[data-accent='graphite'] { --accent: #9a9aa1; --on-accent: #111; }
+
+/* ---- Reduce transparency: solid surfaces, no blur ---- */
+[data-reduce-transparency] {
+  --glass-tint: rgb(30, 32, 33);
+  --glass-tint-strong: rgb(38, 40, 41);
+  --glass-filter: none;
+  --scrim: rgba(0, 0, 0, 0.55);
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-tint: rgb(30, 32, 33);
+    --glass-tint-strong: rgb(38, 40, 41);
+    --glass-filter: none;
+    --scrim: rgba(0, 0, 0, 0.55);
+  }
+}
+
+/* ---- Reduce motion: everything still changes, just without travel or bounce ---- */
+[data-reduce-motion] {
+  --spring-smooth: linear(0, 1);
+  --spring-snappy: linear(0, 1);
+  --spring-bouncy: linear(0, 1);
+  --spring-smooth-d: 1ms;
+  --spring-snappy-d: 1ms;
+  --spring-bouncy-d: 1ms;
+  --fast: 1ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --spring-smooth: linear(0, 1);
+    --spring-snappy: linear(0, 1);
+    --spring-bouncy: linear(0, 1);
+    --spring-smooth-d: 1ms;
+    --spring-snappy-d: 1ms;
+    --spring-bouncy-d: 1ms;
+    --fast: 1ms;
+  }
+}

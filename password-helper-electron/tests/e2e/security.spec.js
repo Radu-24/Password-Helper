@@ -2,11 +2,11 @@
 
 const { test, expect } = require('./fixtures');
 
-test('pages have no Node.js access, only the window.api bridge', async ({ page }) => {
+test('the page has no Node.js access, only the window.api bridge', async ({ page }) => {
   expect(await page.evaluate(() => typeof window.require)).toBe('undefined');
   expect(await page.evaluate(() => typeof window.process)).toBe('undefined');
   expect(await page.evaluate(() => Object.keys(window.api).sort())).toEqual(
-    ['analyze', 'app', 'clipboard', 'hibpRange', 'settings', 'vault', 'window'].sort(),
+    ['analyze', 'app', 'clipboard', 'csvImport', 'hibpRange', 'platform', 'settings', 'vault', 'window'].sort(),
   );
 });
 
@@ -15,13 +15,20 @@ test('API errors reach the page with their code', async ({ page }) => {
   expect(error).toEqual({ code: 'NO_VAULT', message: 'No vault has been created yet.' });
 });
 
+test('only web addresses can be opened from the page', async ({ page }) => {
+  for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'ms-settings:privacy', 'not a url']) {
+    const error = await page.evaluate((target) => window.api.app.openUrl(target).catch((e) => e.code), url);
+    expect(error, url).toBe('INVALID');
+  }
+});
+
 test('the window is sandboxed with context isolation', async ({ electronApp }) => {
   const prefs = await electronApp.evaluate(({ BrowserWindow }) => {
     const win = BrowserWindow.getAllWindows()[0];
     const { sandbox, contextIsolation, nodeIntegration, webSecurity } = win.webContents.getLastWebPreferences();
     return { sandbox, contextIsolation, nodeIntegration, webSecurity, minSize: win.getMinimumSize() };
   });
-  expect(prefs).toEqual({ sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, minSize: [800, 600] });
+  expect(prefs).toEqual({ sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, minSize: [820, 600] });
 });
 
 test('navigating away from the app is blocked', async ({ page }) => {
@@ -29,20 +36,16 @@ test('navigating away from the app is blocked', async ({ page }) => {
     window.location.href = 'https://example.com/';
   });
   await page.waitForTimeout(500);
-  expect(page.url()).toMatch(/^file:\/\/.*\/public\/login\.html$/);
+  expect(page.url()).toMatch(/^file:\/\/.*\/public\/index\.html$/);
   const opened = await page.evaluate(() => window.open('https://example.com/') === null);
   expect(opened).toBe(true);
 });
 
-test('every page ships a strict Content-Security-Policy', async ({ page }) => {
-  for (const file of ['login.html', 'index.html', 'vault.html', 'vault_view.html']) {
-    await page.evaluate((name) => {
-      window.location.href = name;
-    }, file);
-    await page.waitForURL(new RegExp(file.replace('.', '\\.')));
-    const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
-    expect(csp).toContain("script-src 'self'");
-    expect(csp).toContain("connect-src 'none'");
-    expect(await page.locator('script:not([src])').count(), `${file} has no inline scripts`).toBe(0);
+test('the page ships a strict Content-Security-Policy and no inline code', async ({ page }) => {
+  const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
+  for (const rule of ["default-src 'none'", "script-src 'self'", "style-src 'self'", "font-src 'self'", "connect-src 'none'", "object-src 'none'"]) {
+    expect(csp).toContain(rule);
   }
+  expect(await page.locator('script:not([src])').count()).toBe(0);
+  expect(await page.locator('style').count()).toBe(0);
 });

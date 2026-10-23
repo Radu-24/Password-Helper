@@ -140,7 +140,7 @@
    * Live checklist for a NEW password (register form, master password, …).
    *
    * Markup: an element with <li data-check="length|guess|breach|match">Base text</li>
-   * items, and optionally a meter: <div class="mini-meter"><div class="mini-meter-mask"></div></div>.
+   * items, and optionally a 5-segment meter: <div class="meter"><span></span>×5</div>.
    *
    * const checks = PH.Strength.createChecklist({ passwordInput, confirmInput, listEl, meterEl, userInputs: () => [email.value] });
    * const { ok, failure } = await checks.validateNow();   // before submitting
@@ -154,7 +154,6 @@
       li.dataset.label = li.dataset.label || li.textContent.trim();
       items[li.dataset.check] = li;
     }
-    const mask = meterEl && meterEl.querySelector('.mini-meter-mask');
 
     function setItem(name, status, text) {
       const li = items[name];
@@ -190,10 +189,9 @@
 
       if (match) setItem('match', match.ok ? 'ok' : '');
 
-      if (mask) {
+      if (meterEl) {
         const breached = breach.status === 'breached';
-        const score = !value || !state.analysis ? -1 : breached ? 0 : state.analysis.score;
-        mask.style.width = `${100 - (score + 1) * 20}%`;
+        PH.setMeter(meterEl, !value || !state.analysis ? null : breached ? 'breached' : state.analysis.score);
       }
       return evaluation;
     }
@@ -262,5 +260,10 @@
     return { render, run, reset, validateNow, refreshAnalysis: runAnalysis };
   }
 
-  PH.Strength = { createAnalyzer, createBreachChecker, createChecklist, checkNow, describeFailure, sha1Hex, sha256Hex };
+  /** zxcvbn's "3 hours" → "about 3 hours"; "centuries" / "less than a second" stay as they are. */
+  function crackPhrase(display) {
+    return /^\d/.test(display) ? `about ${display}` : display;
+  }
+
+  PH.Strength = { createAnalyzer, createBreachChecker, createChecklist, checkNow, describeFailure, crackPhrase, sha1Hex, sha256Hex };
 })();

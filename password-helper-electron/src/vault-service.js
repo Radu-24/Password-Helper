@@ -8,7 +8,9 @@
 const { EventEmitter } = require('node:events');
 const crypto = require('node:crypto');
 const Policy = require('../public/js/policy.js');
+const Otp = require('../public/js/otp.js');
 const { VaultError } = require('./vault-store');
+const totp = require('./totp');
 
 const BREACH_CONCURRENCY = 3;
 
@@ -108,19 +110,27 @@ class VaultService extends EventEmitter {
   // ---- entries ---------------------------------------------------------------
 
   /**
-   * Entries without passwords, plus health flags:
+   * Entries without passwords or 2FA secrets, plus health flags:
    *   weak (zxcvbn score below the policy), reusedCount (other entries with the
    *   same password), breachCount (null until checkBreaches() ran).
+   * Items in "Recently Deleted" are included (with `deletedAt`) but get no health flags.
    */
   async list() {
     this.touch();
     const full = this.store.list().map((entry) => this.store.getEntry(entry.id));
     const passwordCounts = new Map();
-    for (const entry of full) passwordCounts.set(entry.password, (passwordCounts.get(entry.password) || 0) + 1);
+    for (const entry of full) {
+      if (!entry.deletedAt) passwordCounts.set(entry.password, (passwordCounts.get(entry.password) || 0) + 1);
+    }
 
     const result = [];
     let computed = 0;
     for (const entry of full) {
+      const { password: _password, totp: secret, ...rest } = entry;
+      if (entry.deletedAt) {
+        result.push({ ...rest, hasTotp: Boolean(secret), score: null, weak: false, reusedCount: 0, breachCount: null });
+        continue;
+      }
       let strength = this.strengthCache.get(entry.id);
       if (!strength || strength.updatedAt !== entry.updatedAt) {
         const { score } = this.analysis.analyze(entry.password, [entry.label, entry.username]);
@@ -133,9 +143,9 @@ class VaultService extends EventEmitter {
         }
       }
       const breach = this.breachCache.get(entry.id);
-      const { password: _password, ...rest } = entry;
       result.push({
         ...rest,
+        hasTotp: Boolean(secret),
         score: strength.score,
         weak: strength.weak,
         reusedCount: passwordCounts.get(entry.password) - 1,
@@ -148,6 +158,47 @@ class VaultService extends EventEmitter {
   getEntry(id) {
     this.touch();
     return this.store.getEntry(id);
+  }
+
+  /** For the edit form: password included, 2FA secret not. */
+  getEditable(id) {
+    this.touch();
+    return this.store.getEditable(id);
+  }
+
+  async setFavorite(id, favorite) {
+    this.touch();
+    return this.store.setFavorite(id, favorite);
+  }
+
+  /**
+   * Current 2FA codes (never the secrets).
+   * @param {string[]} [ids]  limit to these entries; default: every entry with 2FA
+   * @returns {{id:string, code:string, period:number, remaining:number}[]}
+   */
+  totpCodes(ids, nowMs = Date.now()) {
+    const wanted = Array.isArray(ids) ? new Set(ids) : null;
+    const codes = [];
+    for (const entry of this.store.activeEntries()) {
+      if (!entry.totp || (wanted && !wanted.has(entry.id))) continue;
+      codes.push({ id: entry.id, ...totp.generate(entry.totp, nowMs) });
+    }
+    return codes;
+  }
+
+  /**
+   * Checks a 2FA setup key / otpauth:// link before it is saved, and shows what
+   * its current code is (so the user can compare it with the website). Nothing is stored.
+   */
+  previewTotp(input, nowMs = Date.now()) {
+    let config;
+    try {
+      config = Otp.parseOtpInput(input);
+    } catch (error) {
+      throw new VaultError('INVALID', error.message);
+    }
+    const { secret: _secret, ...info } = config;
+    return { ...info, ...totp.generate(config, nowMs) };
   }
 
   /** @returns {Promise<object>} the entry (no password) + reusedCount: other entries with the same password */
@@ -165,14 +216,31 @@ class VaultService extends EventEmitter {
 
   countReuse(id) {
     const { password } = this.store.getEntry(id);
-    return this.store.list().filter((entry) => entry.id !== id && this.store.getEntry(entry.id).password === password).length;
+    return this.store.activeEntries().filter((entry) => entry.id !== id && entry.password === password).length;
   }
 
+  /** Moves an item to "Recently Deleted". */
   async remove(id) {
     this.touch();
-    await this.store.remove(id);
+    return this.store.remove(id);
+  }
+
+  async restore(id) {
+    this.touch();
+    return this.store.restore(id);
+  }
+
+  /** Permanent. */
+  async purge(id) {
+    this.touch();
+    await this.store.purge(id);
     this.strengthCache.delete(id);
     this.breachCache.delete(id);
+  }
+
+  async emptyTrash() {
+    this.touch();
+    return this.store.emptyTrash();
   }
 
   async importEntries(entries) {
@@ -199,7 +267,7 @@ class VaultService extends EventEmitter {
    */
   async checkBreaches() {
     this.touch();
-    const entries = this.store.list().map((entry) => this.store.getEntry(entry.id));
+    const entries = this.store.activeEntries();
     const byHash = new Map(); // sha1 → entries
     for (const entry of entries) {
       const hash = crypto.createHash('sha1').update(entry.password, 'utf8').digest('hex').toUpperCase();

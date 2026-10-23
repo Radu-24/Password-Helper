@@ -1,0 +1,186 @@
+/* =====================================================================
+   Overlays: scrim, sheets, alerts, menus, HUD notifications.
+   The scrim and the card are siblings (never nested) so the card's
+   glass still sees the window behind it while the scrim fades.
+   ===================================================================== */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.scrim.show { opacity: 1; }
+[data-reduce-transparency] .scrim { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* ---- Sheets (forms in a floating panel) ---- */
+.sheet {
+  position: fixed;
+  z-index: 101;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--sheet-w, 460px), calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  border-radius: 20px;
+  background: var(--glass-tint-strong);
+  opacity: 0;
+  transform: translate(-50%, -48%) scale(0.94);
+  transition: opacity 180ms ease, transform var(--spring-snappy-d) var(--spring-snappy);
+}
+.sheet.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.sheet.leaving { transition-duration: 150ms, 200ms; transition-timing-function: ease, var(--ease-in); transform: translate(-50%, -49%) scale(0.97); }
+.sheet-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 22px 6px;
+}
+.sheet-header h2 { font: var(--t-title2); letter-spacing: var(--track-display); }
+.sheet-header p { margin-top: 4px; font: var(--t-subhead); color: var(--label-2); }
+.sheet-symbol { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; color: #fff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 78%, white), var(--tint) 60%, color-mix(in srgb, var(--tint) 85%, black)); }
+.sheet-symbol i[data-icon] { --icon-size: 22px; --icon-stroke: 2; }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 22px 8px; }
+.sheet-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 18px 18px;
+}
+.sheet-footer .spacer { flex: 1; }
+.sheet-footer .btn { min-width: 88px; }
+
+.form-grid { display: grid; gap: 12px; }
+.form-label { display: block; margin-bottom: 5px; font: var(--t-subhead); font-weight: 600; color: var(--label-2); }
+
+/* ---- Alerts (icon on top, centred text, macOS 11+) ---- */
+.alert {
+  position: fixed;
+  z-index: 103;
+  top: 50%;
+  left: 50%;
+  width: 272px;
+  padding: 20px 16px 16px;
+  border-radius: 18px;
+  background: var(--glass-tint-strong);
+  text-align: center;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(1.08);
+  transition: opacity 160ms ease, transform var(--spring-snappy-d) var(--spring-snappy);
+}
+.alert.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.alert.leaving { transform: translate(-50%, -50%) scale(0.96); transition-duration: 140ms, 180ms; }
+.alert-icon { width: 56px; height: 56px; margin: 0 auto 12px; }
+.alert-symbol { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 12px; border-radius: 50%;
+  background: color-mix(in srgb, var(--tint) 22%, transparent); color: var(--tint); }
+.alert-symbol i[data-icon] { --icon-size: 28px; --icon-stroke: 2; }
+.alert h2 { font: var(--t-headline); font-size: 14px; }
+.alert p { margin-top: 6px; font: var(--t-subhead); color: var(--label-2); }
+.alert-buttons { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin-top: 18px; }
+.alert-buttons.stacked { grid-auto-flow: row; }
+.alert-buttons .btn { min-height: 30px; padding: 0 10px; }
+
+/* ---- Menus (context menus and pop-up button menus) ---- */
+.menu {
+  position: fixed;
+  z-index: 110;
+  min-width: 190px;
+  max-width: 320px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  padding: 5px;
+  border-radius: 12px;
+  background: var(--glass-tint-strong);
+  opacity: 0;
+  transform: scale(0.96);
+  transform-origin: var(--origin, top left);
+  transition: opacity 120ms ease, transform 160ms var(--ease-out);
+}
+.menu.show { opacity: 1; transform: none; }
+.menu.leaving { opacity: 0; transition-duration: 150ms; }
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border-radius: 6px;
+  color: var(--label);
+  text-align: left;
+  white-space: nowrap;
+}
+.menu-item i[data-icon] { --icon-size: 15px; color: var(--label-2); }
+.menu-item .menu-check { width: 15px; flex: none; }
+.menu-item .menu-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.menu-item .menu-shortcut { color: var(--label-3); font-size: 12px; margin-left: 18px; }
+.menu-item:focus, .menu-item.active { background: var(--accent); color: var(--on-accent); }
+.menu-item:focus i[data-icon], .menu-item.active i[data-icon], .menu-item:focus .menu-shortcut, .menu-item.active .menu-shortcut { color: inherit; opacity: 0.85; }
+.menu-item.destructive { color: #ff7b72; }
+.menu-item.destructive i[data-icon] { color: inherit; }
+.menu-item.destructive:focus, .menu-item.destructive.active { background: var(--red); color: #fff; }
+.menu-item:disabled { color: var(--label-4); }
+.menu-item:disabled i[data-icon] { color: var(--label-4); }
+.menu-separator { height: 1px; margin: 5px 9px; background: var(--separator-strong); }
+.menu-heading { padding: 4px 10px 3px; font: var(--t-caption); font-weight: 650; color: var(--label-3); }
+
+/* ---- HUD notifications (bottom centre) ---- */
+.hud-stack {
+  position: fixed;
+  z-index: 120;
+  left: 50%;
+  bottom: 22px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.hud {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 48px));
+  min-height: 40px;
+  padding: 8px 10px 8px 14px;
+  border-radius: var(--r-capsule);
+  background: var(--glass-tint-strong);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(16px) scale(0.92);
+  transition: opacity 180ms ease, transform var(--spring-bouncy-d) var(--spring-bouncy);
+}
+.hud.show { opacity: 1; transform: none; }
+.hud.leaving { opacity: 0; transform: translateY(8px) scale(0.96); transition-duration: 200ms; transition-timing-function: ease, var(--ease-in); }
+.hud.nudge { animation: nudge 360ms var(--ease-out); }
+.hud-icon { --icon-size: 18px; --icon-stroke: 2.2; flex: none; }
+.hud-text { font: var(--t-body); font-weight: 500; padding-right: 6px; }
+.hud .btn { min-height: 26px; }
+.hud-success .hud-icon { color: var(--green); }
+.hud-warning .hud-icon { color: var(--orange); }
+.hud-error .hud-icon { color: var(--red); }
+.hud-info .hud-icon { color: var(--accent-text); }
+@keyframes nudge {
+  0%, 100% { transform: none; }
+  25% { transform: translateX(-6px); }
+  60% { transform: translateX(5px); }
+}
+
+/* Shake for wrong passwords (fields, lock badge) */
+.shake { animation: shake 420ms var(--ease-out); }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-9px); }
+  35% { transform: translateX(8px); }
+  55% { transform: translateX(-5px); }
+  75% { transform: translateX(3px); }
+}
+[data-reduce-motion] .shake { animation: none; }

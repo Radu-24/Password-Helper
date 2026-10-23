@@ -140,3 +140,52 @@ test('network failures are counted, not reported as clean', async (t) => {
   const { entries } = await service.list();
   assert.equal(entries[0].breachCount, null);
 });
+
+test('totpCodes returns current codes without secrets, and does not keep the vault awake', async (t) => {
+  const { service, timers } = setup(t);
+  await service.create(MASTER);
+  const secret = require('../../public/js/otp.js').base32Encode(Buffer.from('12345678901234567890', 'ascii'));
+  const withCode = await service.add({ label: 'A', password: 'p1', totp: { secret, digits: 8, period: 30, algorithm: 'SHA1' } });
+  await service.add({ label: 'B', password: 'p2' });
+  const scheduled = timers.length;
+
+  const codes = service.totpCodes(undefined, 59_000);
+  assert.deepEqual(codes, [{ id: withCode.id, code: '94287082', period: 30, remaining: 1 }]); // RFC 6238 vector
+  assert.equal(timers.length, scheduled, 'reading codes must not restart the auto-lock timer');
+  assert.deepEqual(service.totpCodes(['nope'], 59_000), []);
+
+  const { entries } = await service.list();
+  assert.deepEqual(entries.map((entry) => [entry.label, entry.hasTotp, 'totp' in entry]), [['A', true, false], ['B', false, false]]);
+  service.lock();
+  assert.throws(() => service.totpCodes(), { code: 'LOCKED' });
+});
+
+test('deleted items are left out of health checks and 2FA codes', async (t) => {
+  const { service } = setup(t);
+  await service.create(MASTER);
+  const secret = 'JBSWY3DPEHPK3PXP';
+  const a = await service.add({ label: 'A', password: 'same-password-123', totp: secret });
+  const b = await service.add({ label: 'B', password: 'same-password-123' });
+  assert.equal(b.reusedCount, 1);
+  await service.remove(a.id);
+
+  const { entries } = await service.list();
+  const deleted = entries.find((entry) => entry.id === a.id);
+  assert.ok(deleted.deletedAt);
+  assert.equal(deleted.weak, false);
+  assert.equal(entries.find((entry) => entry.id === b.id).reusedCount, 0, 'a deleted twin no longer counts as reuse');
+  assert.deepEqual(service.totpCodes(), []);
+  await service.restore(a.id);
+  assert.equal(service.totpCodes().length, 1);
+});
+
+test('previewTotp checks a setup key without saving it', async (t) => {
+  const { service } = setup(t);
+  const preview = service.previewTotp('otpauth://totp/Site:me?secret=JBSWY3DPEHPK3PXP&issuer=Site', 59_000);
+  assert.equal(preview.issuer, 'Site');
+  assert.equal(preview.account, 'me');
+  assert.equal(preview.code.length, 6);
+  assert.equal(preview.remaining, 1);
+  assert.equal('secret' in preview, false);
+  assert.throws(() => service.previewTotp('nope'), { code: 'INVALID' });
+});

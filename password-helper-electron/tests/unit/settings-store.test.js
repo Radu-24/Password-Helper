@@ -75,3 +75,17 @@ test('setSync writes atomically and onChange fires on set', async (t) => {
   assert.deepEqual(fs.readdirSync(path.dirname(filePath)), ['settings.json']);
   assert.equal(new SettingsStore({ filePath }).get('windowBounds').maximized, true);
 });
+
+test('appearance settings are validated', async (t) => {
+  const store = new SettingsStore({ filePath: tempFile(t) });
+  assert.equal(store.get('accent'), 'blue');
+  let result = await store.set({ accent: 'purple', backgroundIntensity: 35, reduceMotion: true, vaultSort: 'recent', onboarded: true });
+  assert.deepEqual(
+    [result.accent, result.backgroundIntensity, result.reduceMotion, result.vaultSort, result.onboarded],
+    ['purple', 35, true, 'recent', true],
+  );
+  result = await store.set({ accent: 'hotdog', backgroundIntensity: 101, vaultSort: 'size' });
+  assert.deepEqual([result.accent, result.backgroundIntensity, result.vaultSort], ['purple', 35, 'recent'], 'invalid values are ignored');
+  result = await store.set({ backgroundIntensity: 12.5 });
+  assert.equal(result.backgroundIntensity, 35, 'whole numbers only');
+});

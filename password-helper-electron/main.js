@@ -12,11 +12,14 @@
  */
 
 const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, powerMonitor, screen, session, shell } = require('electron');
+const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
 const analysis = require('./src/analysis');
 const hibp = require('./src/hibp');
+const csvImport = require('./src/csv-import');
+const qr = require('./src/qr');
 const { VaultStore, VaultError } = require('./src/vault-store');
 const { VaultService } = require('./src/vault-service');
 const { SettingsStore } = require('./src/settings-store');
@@ -46,6 +49,8 @@ let settings = null;
 let vault = null;
 let clipboardGuard = null;
 let pendingImportPath = null;
+/** A parsed CSV waiting for the user to confirm the import (plaintext — dropped as soon as possible). */
+let pendingCsv = null;
 
 // ---------------------------------------------------------------------------
 // IPC plumbing
@@ -126,14 +131,18 @@ function savedBounds() {
 
 function createWindow() {
   const bounds = savedBounds();
+  // macOS keeps its own traffic-light buttons; elsewhere the page draws them.
+  const chrome =
+    process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 20, y: 19 } } : { frame: false };
   mainWindow = new BrowserWindow({
     ...bounds,
-    minWidth: 800,
+    minWidth: 820,
     minHeight: 600,
-    frame: false,
+    ...chrome,
     show: false,
     backgroundColor: '#000000',
     title: 'Password Helper',
+    icon: path.join(PUBLIC_DIR, 'img', 'app-icon-256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -161,8 +170,12 @@ function createWindow() {
     mainWindow = null;
   });
 
-  const startPage = settings.get('showLoginOnStart') ? 'login.html' : 'index.html';
-  mainWindow.loadFile(path.join(PUBLIC_DIR, startPage));
+  // One page: it decides itself whether to show the welcome, sign-in or main screen.
+  mainWindow.loadFile(path.join(PUBLIC_DIR, 'index.html'));
+  mainWindow.on('focus', () => mainWindow.webContents.send('window:focus', true));
+  mainWindow.on('blur', () => mainWindow.webContents.send('window:focus', false));
+  mainWindow.on('maximize', () => mainWindow.webContents.send('window:maximized', true));
+  mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:maximized', false));
 }
 
 function hardenSession() {
@@ -196,6 +209,18 @@ function registerIpc() {
     dataPath: app.getPath('userData'),
   }));
   handle('app:open-data-folder', () => shell.openPath(app.getPath('userData')).then(() => true));
+  // "Open website" on a vault item — only real web addresses, opened in the default browser.
+  handle('app:open-url', async (url) => {
+    let parsed;
+    try {
+      parsed = new URL(String(url));
+    } catch {
+      throw new VaultError('INVALID', 'That isn’t a valid web address.');
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new VaultError('INVALID', 'Only web addresses can be opened.');
+    await shell.openExternal(parsed.href);
+    return true;
+  });
   // Wipes the old (unencrypted) localStorage data once it has been migrated.
   handle('app:purge-legacy-storage', () => session.defaultSession.clearStorageData({ storages: ['localstorage'] }).then(() => true));
 
@@ -213,18 +238,34 @@ function registerIpc() {
   handle('vault:lock', () => vault.lock('manual'));
   handle('vault:touch', () => vault.touch());
   handle('vault:list', () => vault.list());
-  handle('vault:get', (id) => vault.getEntry(id));
+  handle('vault:get', (id) => vault.getEditable(id));
   handle('vault:reveal', (id) => vault.getEntry(id).password);
   handle('vault:copy', (id, field) => {
-    if (field !== 'password' && field !== 'username') throw new VaultError('INVALID', 'Unknown field.');
-    const value = vault.getEntry(id)[field];
-    if (!value) throw new VaultError('INVALID', `This entry has no ${field}.`);
-    // Usernames aren't secret, so they stay on the clipboard.
-    return clipboardGuard.copy(value, field === 'password' ? settings.get('clipboardClearSeconds') : 0);
+    const entry = vault.getEntry(id);
+    let value;
+    if (field === 'password' || field === 'username' || field === 'url') value = entry[field];
+    else if (field === 'totp') value = (vault.totpCodes([id])[0] || {}).code; // none for deleted items
+    else throw new VaultError('INVALID', 'Unknown field.');
+    if (!value) throw new VaultError('INVALID', 'Nothing to copy.');
+    // Usernames and addresses aren't secret, so they stay on the clipboard.
+    const secret = field === 'password' || field === 'totp';
+    return clipboardGuard.copy(value, secret ? settings.get('clipboardClearSeconds') : 0);
   });
+  handle('vault:set-favorite', (id, favorite) => vault.setFavorite(id, favorite === true));
+  handle('vault:totp', (ids) => vault.totpCodes(Array.isArray(ids) ? ids : undefined));
+  // 2FA setup from a QR code: reads a screenshot/image that is on the clipboard.
+  handle('vault:read-qr', () => {
+    const text = qr.decodeNativeImage(clipboard.readImage());
+    if (!text) throw new VaultError('NOT_FOUND', 'No QR code found on the clipboard — copy a screenshot of it first.');
+    return text;
+  });
+  handle('vault:preview-totp', (input) => vault.previewTotp(input));
   handle('vault:add', (fields) => vault.add(fields));
   handle('vault:update', (id, fields) => vault.update(id, fields));
   handle('vault:remove', (id) => vault.remove(id));
+  handle('vault:restore', (id) => vault.restore(id));
+  handle('vault:purge', (id) => vault.purge(id));
+  handle('vault:empty-trash', () => vault.emptyTrash());
   handle('vault:import-legacy', (entries) => vault.importEntries(entries));
   handle('vault:change-password', (current, next) => vault.changePassword(current, next));
   handle('vault:check-breaches', () => vault.checkBreaches());
@@ -260,6 +301,55 @@ function registerIpc() {
     pendingImportPath = null;
     return result;
   });
+
+  // ---- CSV import from browsers / other password managers ----
+  handle('import:choose-csv', async () => {
+    vault.store.assertUnlocked();
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import passwords from a CSV file',
+      properties: ['openFile'],
+      filters: [{ name: 'CSV export', extensions: ['csv'] }],
+    });
+    if (canceled || !filePaths.length) return null;
+    const filePath = filePaths[0];
+    const { size } = await fsp.stat(filePath);
+    if (size > csvImport.MAX_FILE_BYTES) throw new VaultError('INVALID', 'That file is too big to be a password export.');
+    const parsed = csvImport.parseImport(await fsp.readFile(filePath, 'utf8'));
+    // Same title + username as an existing item → probably already in the vault.
+    const fingerprint = (entry) => `${entry.label.toLowerCase()}\u0000${entry.username.toLowerCase()}`;
+    const existing = new Set(vault.store.list().map(fingerprint));
+    const likelyDuplicates = parsed.entries.filter((entry) => existing.has(fingerprint(entry))).length;
+    vault.touch();
+    pendingCsv = { filePath, entries: parsed.entries };
+    return {
+      fileName: path.basename(filePath),
+      format: parsed.format,
+      count: parsed.entries.length,
+      skipped: parsed.skipped,
+      withTotp: parsed.entries.filter((entry) => entry.totp).length,
+      totpIgnored: parsed.totpIgnored,
+      likelyDuplicates,
+      sample: parsed.entries.slice(0, 5).map((entry) => entry.label),
+    };
+  });
+  handle('import:commit-csv', async () => {
+    if (!pendingCsv || !pendingCsv.entries) throw new VaultError('INVALID', 'Choose a CSV file first.');
+    const { entries } = pendingCsv;
+    pendingCsv = { filePath: pendingCsv.filePath, entries: null };
+    return vault.importEntries(entries);
+  });
+  // The export file holds every password in plain text — offer to move it to the trash.
+  handle('import:trash-csv', async () => {
+    if (!pendingCsv || !pendingCsv.filePath) return false;
+    const { filePath } = pendingCsv;
+    pendingCsv = null;
+    await shell.trashItem(filePath);
+    return true;
+  });
+  handle('import:cancel', () => {
+    pendingCsv = null;
+    return true;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +382,12 @@ function init() {
     getAutoLockMinutes: () => settings.get('autoLockMinutes'),
   });
 
-  vault.on('locked', (reason) => sendToPages('vault:locked', reason));
+  vault.on('locked', (reason) => {
+    // Drop any half-finished import: the parsed CSV holds plain-text passwords.
+    if (pendingCsv) pendingCsv = { filePath: pendingCsv.filePath, entries: null };
+    pendingImportPath = null;
+    sendToPages('vault:locked', reason);
+  });
   vault.on('unlocked', () => sendToPages('vault:unlocked'));
   settings.onChange((next, previous) => {
     if (next.autoLockMinutes !== previous.autoLockMinutes) vault.touch();

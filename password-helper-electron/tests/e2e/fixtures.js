@@ -4,6 +4,9 @@
  * Shared Playwright fixtures: every test gets a fresh Electron app with its
  * own temporary data folder, and the Pwned Passwords API replaced by an
  * offline fake (so tests are fast and never touch the network).
+ *
+ * By default the app starts straight in the main window (welcome and
+ * sign-in already done); use `test.use({ startInApp: false })` to test them.
  */
 
 const { test: base, expect, _electron: electron } = require('@playwright/test');
@@ -36,12 +39,16 @@ async function launchApp(userDataDir) {
   }, BREACHED.map(sha1));
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
+  // Test machines have no GPU; don't let the "glass is slow" hint cover buttons.
+  await page.evaluate(() => localStorage.setItem('ph.performanceHintShown', 'true'));
   return { app, page };
 }
 
 const test = base.extend({
-  userDataDir: async ({}, use) => {
+  startInApp: [true, { option: true }],
+  userDataDir: async ({ startInApp }, use) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ph-e2e-'));
+    if (startInApp) fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ onboarded: true, showLoginOnStart: false }));
     await use(dir);
     fs.rmSync(dir, { recursive: true, force: true });
   },
@@ -62,35 +69,69 @@ const test = base.extend({
   },
 });
 
-/** Active screen id (pages show one .screen.active at a time). */
-const activeScreen = (page) => page.locator('.screen.active').first().getAttribute('id');
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-async function skipLogin(page) {
-  await page.click('#skipBtn');
-  await page.waitForURL(/index\.html/);
-  await expect(page.locator('#main-menu')).toHaveClass(/active/);
+/** The newest notification. */
+const lastHud = (page) => page.locator('.hud:not(.leaving)').last();
+const hudWith = (page, text) => page.locator('.hud', { hasText: text });
+
+/** Clicks a sidebar destination ('analyzer', 'generator', 'items', …). */
+async function go(page, name) {
+  await page.click(`.sidebar-item[data-nav="${name}"]`);
 }
 
-/** From the main menu: open the vault and create it with MASTER. */
+const clipboardText = (electronApp) => electronApp.evaluate(({ clipboard }) => clipboard.readText());
+
+/** Creates the vault from the gate shown on the vault views. */
 async function createVault(page) {
-  await page.click('[data-page="vault.html"]');
-  await page.waitForURL(/vault\.html/);
-  await expect(page.locator('#create-screen')).toHaveClass(/active/);
+  await go(page, 'items');
+  await expect(page.locator('#create-form')).toBeVisible();
   await page.fill('#create-password', MASTER);
   await page.fill('#create-confirm', MASTER);
   await page.click('#create-submit');
-  await expect(page.locator('#vault-menu-screen')).toHaveClass(/active/);
+  await expect(page.locator('#view-vault')).toBeVisible();
 }
 
-async function addEntry(page, { label, username = '', password, notes = '' }) {
-  await page.click('#btn-add');
-  await expect(page.locator('#entry-screen')).toHaveClass(/active/);
-  await page.fill('#label', label);
-  await page.fill('#username', username);
-  await page.fill('#vault-password', password);
-  await page.fill('#notes', notes);
-  await page.press('#label', 'Enter');
-  await expect(page.locator('#vault-menu-screen')).toHaveClass(/active/);
+/** Adds an item through the editor (vault must be unlocked and showing). */
+async function addItem(page, { label, username = '', password, url = '', notes = '' }) {
+  await page.click('#vault-new');
+  const editor = page.locator('#vault-detail form.editor');
+  await editor.locator('.editor-title-input').fill(label);
+  await editor.locator('input[aria-label="Username"]').fill(username);
+  await editor.locator('input[aria-label="Password"]').fill(password);
+  await editor.locator('input[aria-label="Website"]').fill(url);
+  await editor.locator('textarea[aria-label="Notes"]').fill(notes);
+  await editor.locator('button[type="submit"]').click();
+  await expect(page.locator('#vault-detail .detail-title')).toHaveText(label);
 }
 
-module.exports = { test, expect, launchApp, activeScreen, skipLogin, createVault, addEntry, MASTER, BREACHED };
+/** Selects an item in the list by its title. */
+async function selectItem(page, label) {
+  await page.locator('#vault-list .list-item', { has: page.locator('.list-title', { hasText: new RegExp(`^${label}$`) }) }).click();
+  await expect(page.locator('#vault-detail .detail-title')).toHaveText(label);
+}
+
+/** Text of a secret once the decode animation has finished. */
+async function secretText(locator) {
+  await expect(locator).toBeVisible();
+  await expect(locator.locator('.scramble')).toHaveCount(0);
+  return locator.textContent();
+}
+
+module.exports = {
+  test,
+  expect,
+  launchApp,
+  lastHud,
+  hudWith,
+  go,
+  clipboardText,
+  createVault,
+  addItem,
+  selectItem,
+  secretText,
+  MASTER,
+  BREACHED,
+};

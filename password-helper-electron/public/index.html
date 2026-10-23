@@ -1,246 +1,601 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-accent="blue">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Password Helper</title>
+  <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/index.css">
-  <script defer src="js/common.js"></script>
+  <link rel="stylesheet" href="css/controls.css">
+  <link rel="stylesheet" href="css/shell.css">
+  <link rel="stylesheet" href="css/overlays.css">
+  <link rel="stylesheet" href="css/views.css">
+  <!-- Shared libraries (no DOM) -->
+  <script defer src="js/icons.js"></script>
   <script defer src="js/policy.js"></script>
-  <script defer src="js/strength.js"></script>
+  <script defer src="js/otp.js"></script>
   <script defer src="js/generator.js"></script>
   <script defer src="js/wordlist-eff.js"></script>
-  <script defer src="js/analyzer.js"></script>
-  <script defer src="js/generator-ui.js"></script>
-  <script defer src="js/index.js"></script>
+  <!-- App framework -->
+  <script defer src="js/core.js"></script>
+  <script defer src="js/matrix.js"></script>
+  <script defer src="js/overlays.js"></script>
+  <script defer src="js/controls.js"></script>
+  <script defer src="js/strength.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/vault-data.js"></script>
+  <script defer src="js/vault-model.js"></script>
+  <!-- Screens and views -->
+  <script defer src="js/views/onboarding.js"></script>
+  <script defer src="js/views/analyzer.js"></script>
+  <script defer src="js/views/generator.js"></script>
+  <script defer src="js/views/vault-gate.js"></script>
+  <script defer src="js/views/item-editor.js"></script>
+  <script defer src="js/views/vault.js"></script>
+  <script defer src="js/views/codes.js"></script>
+  <script defer src="js/views/security.js"></script>
+  <script defer src="js/views/settings.js"></script>
+  <script defer src="js/app.js"></script>
 </head>
 <body>
-  <!-- MAIN MENU -->
-  <section id="main-menu" class="screen active" aria-labelledby="menu-title">
-    <div class="card">
-      <h1 id="menu-title">🔐 Password Helper</h1>
-      <button type="button" class="btn" data-screen="analyzer-screen">🛡️ Password Analyzer</button>
-      <button type="button" class="btn" data-screen="generator-screen">🎲 Password Generator</button>
-      <button type="button" class="btn" data-page="vault.html">🗄️ Vault</button>
-      <button type="button" class="btn" data-screen="settings-screen">⚙️ Settings</button>
-      <button type="button" class="link-btn menu-logout" id="logout">⎋ Log out</button>
-    </div>
-  </section>
+  <canvas id="matrix" aria-hidden="true"></canvas>
 
-  <!-- GENERATOR -->
-  <section id="generator-screen" class="screen" aria-labelledby="generator-title">
-    <div class="card generator-card">
-      <h1 id="generator-title">🎲 Password Generator</h1>
+  <!-- Window buttons. macOS draws its own, so these are hidden there. -->
+  <div class="traffic-lights" id="traffic-lights">
+    <button type="button" class="tl tl-close" data-window="close" aria-label="Close" title="Close">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 3.5l5 5m0-5l-5 5"/></svg>
+    </button>
+    <button type="button" class="tl tl-min" data-window="minimize" aria-label="Minimize" title="Minimize">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.75 6h6.5"/></svg>
+    </button>
+    <button type="button" class="tl tl-zoom" data-window="toggle-maximize" aria-label="Zoom" title="Zoom">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path class="tl-fill" d="M3.2 8.8V4.6l4.2 4.2zM8.8 3.2v4.2L4.6 3.2z"/></svg>
+    </button>
+  </div>
 
-      <div class="segmented" role="radiogroup" aria-label="What to generate">
-        <button type="button" role="radio" class="segment" data-mode="password" aria-checked="true">Password</button>
-        <button type="button" role="radio" class="segment" data-mode="passphrase" aria-checked="false">Passphrase</button>
-      </div>
-
-      <div class="generated">
-        <output id="gen-output" class="generated-value" aria-live="polite" aria-label="Generated password"></output>
-        <div class="generated-actions">
-          <button type="button" class="icon-btn" id="gen-refresh" title="Generate another (Ctrl+G)" aria-label="Generate another">🔄</button>
-          <button type="button" class="icon-btn" id="gen-copy" title="Copy" aria-label="Copy">📋</button>
-        </div>
-      </div>
-      <p id="gen-strength" class="gen-strength"></p>
-
-      <div id="gen-password-options" class="gen-options">
-        <div class="setting-row">
-          <label for="gen-length">Length</label>
-          <div class="range-wrap">
-            <input type="range" id="gen-length" min="8" max="64" step="1">
-            <span id="gen-length-value" class="range-value">20</span>
-          </div>
-        </div>
-        <div class="chips" role="group" aria-label="Character types">
-          <label class="chip-toggle"><input type="checkbox" id="gen-lowercase"><span>a–z</span></label>
-          <label class="chip-toggle"><input type="checkbox" id="gen-uppercase"><span>A–Z</span></label>
-          <label class="chip-toggle"><input type="checkbox" id="gen-digits"><span>0–9</span></label>
-          <label class="chip-toggle"><input type="checkbox" id="gen-symbols"><span>!@#$</span></label>
-          <label class="chip-toggle"><input type="checkbox" id="gen-ambiguous"><span>Avoid Il1O0o</span></label>
-        </div>
-      </div>
-
-      <div id="gen-passphrase-options" class="gen-options hidden">
-        <div class="setting-row">
-          <label for="gen-words">Words</label>
-          <div class="range-wrap">
-            <input type="range" id="gen-words" min="3" max="12" step="1">
-            <span id="gen-words-value" class="range-value">6</span>
-          </div>
-        </div>
-        <div class="setting-row">
-          <label for="gen-separator">Separator</label>
-          <select id="gen-separator" class="field compact">
-            <option value="-">Hyphen  ( - )</option>
-            <option value=" ">Space</option>
-            <option value=".">Dot  ( . )</option>
-            <option value="_">Underscore  ( _ )</option>
-            <option value=",">Comma  ( , )</option>
-          </select>
-        </div>
-        <div class="chips" role="group" aria-label="Passphrase options">
-          <label class="chip-toggle"><input type="checkbox" id="gen-capitalize"><span>Capitalize</span></label>
-          <label class="chip-toggle"><input type="checkbox" id="gen-number"><span>Add a number</span></label>
-        </div>
-      </div>
-
-      <button type="button" class="btn secondary" id="gen-analyze">🛡️ Check it in the Analyzer</button>
-      <button type="button" class="btn" data-screen="main-menu">← Back</button>
-      <p class="credit">Passphrases use the <a href="https://www.eff.org/dice" target="_blank" rel="noopener">EFF Large Wordlist</a> (CC BY 3.0 US).</p>
-    </div>
-  </section>
-
-  <!-- SETTINGS -->
-  <section id="settings-screen" class="screen" aria-labelledby="settings-title">
-    <div class="card settings-card">
-      <h1 id="settings-title">⚙️ Settings</h1>
-
-      <h2 class="settings-heading">Vault</h2>
-      <div class="setting-row">
-        <label for="set-autolock">Lock the vault after</label>
-        <select id="set-autolock" class="field compact" data-setting="autoLockMinutes" data-type="number">
-          <option value="1">1 minute</option>
-          <option value="5">5 minutes</option>
-          <option value="15">15 minutes</option>
-          <option value="30">30 minutes</option>
-          <option value="60">1 hour</option>
-          <option value="0">Never</option>
-        </select>
-      </div>
-      <div class="toggle-row">
-        <label class="switch">
-          <input type="checkbox" id="set-lock-minimize" data-setting="lockOnMinimize">
-          <span class="slider-track"><span class="slider-thumb"></span></span>
-        </label>
-        <label for="set-lock-minimize">Lock the vault when the window is minimised</label>
-      </div>
-      <div class="setting-row">
-        <label for="set-clipboard">Clear copied passwords after</label>
-        <select id="set-clipboard" class="field compact" data-setting="clipboardClearSeconds" data-type="number">
-          <option value="15">15 seconds</option>
-          <option value="30">30 seconds</option>
-          <option value="60">1 minute</option>
-          <option value="120">2 minutes</option>
-          <option value="0">Never</option>
-        </select>
-      </div>
-
-      <h2 class="settings-heading">App</h2>
-      <div class="toggle-row">
-        <label class="switch">
-          <input type="checkbox" id="set-clear" data-setting="clearAnalyzerOnBack">
-          <span class="slider-track"><span class="slider-thumb"></span></span>
-        </label>
-        <label for="set-clear">Clear the analyzer password when going back</label>
-      </div>
-      <div class="toggle-row">
-        <label class="switch">
-          <input type="checkbox" id="set-matrix" data-setting="matrixBackground">
-          <span class="slider-track"><span class="slider-thumb"></span></span>
-        </label>
-        <label for="set-matrix">Matrix background animation</label>
-      </div>
-      <div class="toggle-row">
-        <label class="switch">
-          <input type="checkbox" id="set-login" data-setting="showLoginOnStart">
-          <span class="slider-track"><span class="slider-thumb"></span></span>
-        </label>
-        <label for="set-login">Show the login screen at startup</label>
-      </div>
-
-      <h2 class="settings-heading">Keyboard shortcuts</h2>
-      <dl class="shortcuts">
-        <dt>Esc</dt><dd>Back / close</dd>
-        <dt>Enter</dt><dd>Submit the form</dd>
-        <dt>Ctrl + L</dt><dd>Lock the vault (anywhere)</dd>
-        <dt>Ctrl + F</dt><dd>Search the vault</dd>
-        <dt>Ctrl + N</dt><dd>New vault entry</dd>
-        <dt>Ctrl + G</dt><dd>Generate a password</dd>
-      </dl>
-
-      <h2 class="settings-heading">About</h2>
-      <p class="about" id="about-text">Password Helper</p>
-      <button type="button" class="link-btn" id="open-data-folder">Open data folder</button>
-
-      <button type="button" class="btn" data-screen="main-menu">← Back</button>
-    </div>
-  </section>
-
-  <!-- ANALYZER -->
-  <section id="analyzer-screen" class="screen" aria-labelledby="analyzer-title">
-    <div class="card">
-      <h1 id="analyzer-title">🛡️ Password Analyzer</h1>
-
-      <div class="password-field analyzer-input">
-        <input id="password" class="field" type="password" placeholder="Type your password…"
-               autocomplete="off" spellcheck="false" aria-describedby="result" autofocus>
-        <button type="button" class="reveal-btn" id="togglePwd"><img src="icons/eye.png" alt=""></button>
-      </div>
-      <p id="char-count" class="char-count"></p>
-
-      <div id="strength-bar" class="strength-bar" role="meter" aria-label="Password strength"
-           aria-valuemin="0" aria-valuemax="4" aria-valuenow="0">
-        <div id="bar-mask" class="bar-mask"></div>
-      </div>
-      <p id="result" class="result" aria-live="polite"></p>
-      <p id="result-detail" class="result-detail"></p>
-
-      <ul class="requirements" aria-label="Checks">
-        <li id="req-length">At least 15 characters</li>
-        <li id="req-guess">Hard to guess — no common words, names or patterns</li>
-        <li id="req-breach">Not found in known data breaches</li>
+  <!-- ===================================================================
+       WELCOME (first launch)
+       =================================================================== -->
+  <main class="screen screen-center" id="screen-welcome" aria-labelledby="welcome-title" hidden>
+    <div class="drag-strip" aria-hidden="true"></div>
+    <div class="glass welcome-card" data-enter>
+      <img class="welcome-icon" src="img/app-icon.svg" alt="" width="96" height="96">
+      <h1 class="welcome-title" id="welcome-title">Welcome to Password Helper</h1>
+      <ul class="feature-list">
+        <li class="feature">
+          <span class="feature-icon" data-tint="green"><i data-icon="lock"></i></span>
+          <div><h2>An encrypted vault</h2><p>Passwords are encrypted on this computer with a master password only you know.</p></div>
+        </li>
+        <li class="feature">
+          <span class="feature-icon" data-tint="blue"><i data-icon="gauge"></i></span>
+          <div><h2>Know how strong a password is</h2><p>See how long it would take to crack, and whether it has shown up in a data breach.</p></div>
+        </li>
+        <li class="feature">
+          <span class="feature-icon" data-tint="orange"><i data-icon="timer"></i></span>
+          <div><h2>Verification codes built in</h2><p>Keep two-factor codes next to the passwords they protect.</p></div>
+        </li>
+        <li class="feature">
+          <span class="feature-icon" data-tint="purple"><i data-icon="file-up"></i></span>
+          <div><h2>Bring your passwords with you</h2><p>Import from Chrome, Edge, Firefox, Safari, Bitwarden, 1Password, KeePassXC or LastPass.</p></div>
+        </li>
       </ul>
-      <p class="tip">Tip: length beats complexity — four or five random words make a strong, memorable password.</p>
-
-      <div class="toggle-row">
-        <label class="switch">
-          <input type="checkbox" id="masterToggle">
-          <span class="slider-track"><span class="slider-thumb"></span></span>
-        </label>
-        <label for="masterToggle">Advanced Options</label>
-      </div>
-      <button type="button" class="btn" id="analyzer-back">← Back</button>
+      <button type="button" class="btn btn-primary btn-large welcome-continue" id="welcome-continue">Continue</button>
     </div>
-  </section>
+  </main>
 
-  <!-- ADVANCED PANEL (slides in next to the analyzer) -->
-  <aside id="advanced-panel" aria-labelledby="advanced-title">
-    <div class="card">
-      <h2 id="advanced-title">Advanced Features</h2>
-
-      <div class="toggle-row">
-        <label class="switch">
-          <input type="checkbox" id="opt-breach">
-          <span class="slider-track"><span class="slider-thumb"></span></span>
-        </label>
-        <label for="opt-breach">Check data breaches (Have I Been Pwned)</label>
-      </div>
-      <p class="option-note">Only the first 5 characters of the password's SHA-1 hash leave your computer.</p>
-
-      <div class="toggle-row">
-        <label class="switch">
-          <input type="checkbox" id="opt-insights">
-          <span class="slider-track"><span class="slider-thumb"></span></span>
-        </label>
-        <label for="opt-insights">Show pattern insights</label>
-      </div>
-      <textarea id="insights" class="info-box" rows="6" readonly aria-label="Pattern insights"></textarea>
-
-      <div class="toggle-row">
-        <label class="switch">
-          <input type="checkbox" id="opt-hash">
-          <span class="slider-track"><span class="slider-thumb"></span></span>
-        </label>
-        <label for="opt-hash">Show SHA-256 hash <span class="tag">educational</span></label>
-      </div>
-      <textarea id="hash-output" class="info-box mono" rows="3" readonly aria-label="SHA-256 hash"></textarea>
-      <p id="hash-note" class="option-note hidden">An unsalted hash is not a safe way to store passwords — identical passwords always give identical hashes.</p>
+  <!-- ===================================================================
+       SIGN IN (account server — not online yet)
+       =================================================================== -->
+  <main class="screen screen-center" id="screen-signin" aria-labelledby="signin-title" hidden>
+    <div class="drag-strip" aria-hidden="true"></div>
+    <div class="glass signin-card" id="signin-card" data-enter>
+      <img class="signin-icon" src="img/app-icon.svg" alt="" width="72" height="72">
+      <h1 class="signin-title" id="signin-title">Sign in to Password Helper</h1>
+      <p class="signin-lead" id="signin-lead">Sync between devices is coming soon. Your vault always stays encrypted on this computer.</p>
+      <form id="signin-form" class="signin-form" data-mode="signin" novalidate>
+        <div class="field-stack">
+          <label class="sr-only" for="signin-email">Email</label>
+          <input class="stack-input" type="email" id="signin-email" placeholder="Email" autocomplete="username" spellcheck="false" title="">
+          <div class="secure-field stack-secure">
+            <label class="sr-only" for="signin-password">Password</label>
+            <input class="stack-input" type="password" id="signin-password" placeholder="Password" autocomplete="current-password" spellcheck="false" title="">
+            <button type="button" class="field-btn" data-reveal="signin-password" aria-label="Show password"><i data-icon="eye"></i></button>
+          </div>
+          <div class="secure-field stack-secure" id="signin-confirm-row" hidden>
+            <label class="sr-only" for="signin-confirm">Confirm password</label>
+            <input class="stack-input" type="password" id="signin-confirm" placeholder="Confirm password" autocomplete="new-password" spellcheck="false" title="">
+            <button type="button" class="field-btn" data-reveal="signin-confirm" aria-label="Show password"><i data-icon="eye"></i></button>
+          </div>
+        </div>
+        <div class="collapsible" id="signin-checks-wrap">
+          <ul class="checklist" id="signin-checks" aria-label="Password requirements">
+            <li data-check="length">At least 15 characters</li>
+            <li data-check="guess">Hard to guess — no common words, names or your email</li>
+            <li data-check="breach">Not found in known data breaches</li>
+            <li data-check="match">Both passwords match</li>
+          </ul>
+        </div>
+        <button type="submit" class="btn btn-primary btn-large" id="signin-submit">Sign In</button>
+      </form>
+      <button type="button" class="btn btn-plain" id="signin-toggle">Create an account</button>
+      <div class="signin-divider" role="presentation"></div>
+      <button type="button" class="btn btn-secondary" id="signin-skip">Continue without an account</button>
     </div>
-  </aside>
+  </main>
+
+  <!-- ===================================================================
+       MAIN WINDOW: sidebar + views
+       =================================================================== -->
+  <div class="screen app" id="screen-app" hidden>
+    <nav class="sidebar glass" id="sidebar" aria-label="Sidebar">
+      <div class="sidebar-top"></div>
+      <div class="sidebar-scroll" id="sidebar-scroll">
+        <div class="sidebar-section">
+          <h2 class="sidebar-heading">Tools</h2>
+          <ul class="sidebar-list">
+            <li><button type="button" class="sidebar-item" data-nav="analyzer" title="Analyzer (Ctrl+1)">
+              <span class="sb-icon" data-tint="blue"><i data-icon="gauge"></i></span><span class="sb-label">Analyzer</span>
+            </button></li>
+            <li><button type="button" class="sidebar-item" data-nav="generator" title="Generator (Ctrl+2)">
+              <span class="sb-icon" data-tint="purple"><i data-icon="wand-sparkles"></i></span><span class="sb-label">Generator</span>
+            </button></li>
+          </ul>
+        </div>
+        <div class="sidebar-section">
+          <h2 class="sidebar-heading">Vault</h2>
+          <ul class="sidebar-list">
+            <li><button type="button" class="sidebar-item" data-nav="items" title="All Items (Ctrl+3)">
+              <span class="sb-icon" data-tint="graphite"><i data-icon="key-round"></i></span><span class="sb-label">All Items</span><span class="sb-count" data-count="items"></span>
+            </button></li>
+            <li><button type="button" class="sidebar-item" data-nav="favorites" title="Favourites (Ctrl+4)">
+              <span class="sb-icon" data-tint="yellow"><i data-icon="star"></i></span><span class="sb-label">Favourites</span><span class="sb-count" data-count="favorites"></span>
+            </button></li>
+            <li><button type="button" class="sidebar-item" data-nav="codes" title="Verification Codes (Ctrl+5)">
+              <span class="sb-icon" data-tint="orange"><i data-icon="timer"></i></span><span class="sb-label">Verification Codes</span><span class="sb-count" data-count="codes"></span>
+            </button></li>
+            <li><button type="button" class="sidebar-item" data-nav="security" title="Security (Ctrl+6)">
+              <span class="sb-icon" data-tint="red"><i data-icon="shield-alert"></i></span><span class="sb-label">Security</span><span class="sb-count" data-count="security"></span>
+            </button></li>
+            <li id="nav-deleted-row" hidden><button type="button" class="sidebar-item" data-nav="deleted">
+              <span class="sb-icon" data-tint="gray"><i data-icon="trash"></i></span><span class="sb-label">Recently Deleted</span><span class="sb-count" data-count="deleted"></span>
+            </button></li>
+          </ul>
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="vault-status" id="vault-status" hidden>
+          <i data-icon="lock-open" class="vault-status-icon"></i>
+          <span class="vault-status-text" id="vault-status-text">Vault unlocked</span>
+          <button type="button" class="btn btn-small btn-tinted" id="vault-lock-btn" title="Lock the vault (Ctrl+L)">Lock</button>
+        </div>
+        <ul class="sidebar-list">
+          <li><button type="button" class="sidebar-item" data-nav="settings" title="Settings (Ctrl+,)">
+            <span class="sb-icon" data-tint="gray"><i data-icon="settings"></i></span><span class="sb-label">Settings</span>
+          </button></li>
+        </ul>
+      </div>
+      <div class="sidebar-indicator" id="sidebar-indicator" aria-hidden="true"></div>
+    </nav>
+    <div class="sidebar-resizer" id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="-1"></div>
+
+    <div class="content" id="content">
+
+      <!-- ============================ ANALYZER ============================ -->
+      <section class="view" id="view-analyzer" data-view="analyzer" aria-labelledby="analyzer-title" hidden>
+        <header class="toolbar">
+          <button type="button" class="tb-btn glass-capsule sidebar-toggle" data-action="toggle-sidebar" aria-label="Show or hide the sidebar" title="Show or hide the sidebar"><i data-icon="panel-left"></i></button>
+          <div class="toolbar-title"><h1 id="analyzer-title">Analyzer</h1></div>
+        </header>
+        <div class="view-body">
+          <div class="column">
+            <div class="glass platter an-hero" data-enter>
+              <div class="hero-field">
+                <label class="sr-only" for="an-input">Password to check</label>
+                <input id="an-input" class="hero-input" type="password" placeholder="Type or paste a password" autocomplete="off" spellcheck="false" aria-describedby="an-verdict">
+                <button type="button" class="field-btn" id="an-clear" aria-label="Clear" title="Clear" hidden><i data-icon="circle-x"></i></button>
+                <button type="button" class="field-btn" data-reveal="an-input" aria-label="Show password"><i data-icon="eye"></i></button>
+              </div>
+              <div class="an-summary" id="an-summary">
+                <div class="meter meter-large" id="an-meter" role="meter" aria-label="Password strength" aria-valuemin="0" aria-valuemax="4" aria-valuenow="0">
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <div class="an-verdict" id="an-verdict" aria-live="polite">
+                  <p class="an-verdict-title" id="an-verdict-title">Nothing to check yet</p>
+                  <p class="an-verdict-detail" id="an-verdict-detail">Everything is analysed on this computer — nothing you type here is saved.</p>
+                </div>
+                <p class="an-count" id="an-count"></p>
+              </div>
+            </div>
+
+            <div class="glass platter" data-enter>
+              <div class="platter-header"><h2>Checks</h2></div>
+              <ul class="status-list" id="an-checks">
+                <li id="an-check-length" data-status="todo"><span class="status-icon"></span><span class="status-text">At least 15 characters</span></li>
+                <li id="an-check-guess" data-status="todo"><span class="status-icon"></span><span class="status-text">Hard to guess — no common words, names or patterns</span></li>
+                <li id="an-check-breach" data-status="off"><span class="status-icon"></span><span class="status-text">Not found in known data breaches</span>
+                  <button type="button" class="btn btn-small btn-tinted" id="an-breach-on">Turn On</button></li>
+              </ul>
+            </div>
+
+            <div class="glass platter collapsible-platter" id="an-times" data-enter hidden>
+              <div class="platter-header"><h2>Time to crack</h2></div>
+              <dl class="kv-list">
+                <div><dt>Offline attack on a slow hash, like bcrypt</dt><dd id="an-time-slow"></dd></div>
+                <div><dt>Offline attack on a fast hash, like SHA-1</dt><dd id="an-time-fast"></dd></div>
+                <div><dt>Online attack without rate limits</dt><dd id="an-time-online"></dd></div>
+                <div><dt>Online attack with rate limits</dt><dd id="an-time-throttled"></dd></div>
+              </dl>
+            </div>
+
+            <div class="glass platter" id="an-insights" data-enter hidden>
+              <div class="platter-header"><h2>Pattern insights</h2></div>
+              <div class="insights" id="an-insights-body"></div>
+            </div>
+
+            <div class="glass platter" id="an-hash" data-enter hidden>
+              <div class="platter-header"><h2>SHA-256 hash</h2>
+                <button type="button" class="btn btn-small btn-tinted" id="an-hash-copy">Copy</button></div>
+              <p class="hash-value" id="an-hash-value"></p>
+              <p class="platter-note">An unsalted hash is not a safe way to store passwords — the same password always gives the same hash.</p>
+            </div>
+
+            <div class="glass platter" data-enter>
+              <div class="platter-header"><h2>Options</h2></div>
+              <div class="rows">
+                <label class="row row-switch">
+                  <span class="row-text"><span class="row-title">Check known data breaches</span>
+                    <span class="row-subtitle">Only the first 5 characters of the password’s SHA-1 hash are sent to Have I Been Pwned.</span></span>
+                  <input type="checkbox" class="switch" id="an-opt-breach" role="switch">
+                </label>
+                <label class="row row-switch">
+                  <span class="row-text"><span class="row-title">Show pattern insights</span>
+                    <span class="row-subtitle">Words, dates and keyboard patterns found in the password.</span></span>
+                  <input type="checkbox" class="switch" id="an-opt-insights" role="switch">
+                </label>
+                <label class="row row-switch">
+                  <span class="row-text"><span class="row-title">Show SHA-256 hash</span>
+                    <span class="row-subtitle">For learning how hashing works.</span></span>
+                  <input type="checkbox" class="switch" id="an-opt-hash" role="switch">
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================ GENERATOR ============================ -->
+      <section class="view" id="view-generator" data-view="generator" aria-labelledby="generator-title" hidden>
+        <header class="toolbar">
+          <button type="button" class="tb-btn glass-capsule sidebar-toggle" data-action="toggle-sidebar" aria-label="Show or hide the sidebar" title="Show or hide the sidebar"><i data-icon="panel-left"></i></button>
+          <div class="toolbar-title"><h1 id="generator-title">Generator</h1></div>
+          <div class="toolbar-center">
+            <div class="segmented glass-capsule" id="gen-mode" role="radiogroup" aria-label="What to generate">
+              <button type="button" role="radio" class="segment" data-value="password" aria-checked="true">Password</button>
+              <button type="button" role="radio" class="segment" data-value="passphrase" aria-checked="false">Passphrase</button>
+            </div>
+          </div>
+        </header>
+        <div class="view-body">
+          <div class="column">
+            <div class="glass platter gen-hero" data-enter>
+              <output class="secret gen-output" id="gen-output" aria-live="polite" aria-label="Generated password"></output>
+              <div class="gen-strength">
+                <div class="meter" id="gen-meter" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+                <p id="gen-strength-text"></p>
+              </div>
+              <div class="gen-actions">
+                <button type="button" class="btn btn-primary" id="gen-copy"><i data-icon="copy"></i><span>Copy</span></button>
+                <button type="button" class="btn btn-secondary" id="gen-refresh" title="Generate another (Ctrl+G)"><i data-icon="refresh-cw"></i><span>New</span></button>
+                <button type="button" class="btn btn-secondary" id="gen-save"><i data-icon="key-round"></i><span>Save to Vault</span></button>
+                <button type="button" class="btn btn-secondary" id="gen-analyze"><i data-icon="gauge"></i><span>Analyze</span></button>
+              </div>
+            </div>
+
+            <div class="glass platter" id="gen-password-options" data-enter>
+              <div class="platter-header"><h2>Password options</h2></div>
+              <div class="rows">
+                <div class="row row-slider">
+                  <label class="row-title" for="gen-length">Length</label>
+                  <input type="range" class="slider" id="gen-length" min="8" max="64" step="1">
+                  <output class="slider-value" id="gen-length-value" for="gen-length"></output>
+                </div>
+                <label class="row row-switch"><span class="row-title">Uppercase letters <span class="row-hint">A–Z</span></span>
+                  <input type="checkbox" class="switch" id="gen-uppercase" role="switch"></label>
+                <label class="row row-switch"><span class="row-title">Lowercase letters <span class="row-hint">a–z</span></span>
+                  <input type="checkbox" class="switch" id="gen-lowercase" role="switch"></label>
+                <label class="row row-switch"><span class="row-title">Numbers <span class="row-hint">0–9</span></span>
+                  <input type="checkbox" class="switch" id="gen-digits" role="switch"></label>
+                <label class="row row-switch"><span class="row-title">Symbols <span class="row-hint">!@#$%</span></span>
+                  <input type="checkbox" class="switch" id="gen-symbols" role="switch"></label>
+                <label class="row row-switch"><span class="row-title">Avoid look-alike characters <span class="row-hint">Il1O0o</span></span>
+                  <input type="checkbox" class="switch" id="gen-ambiguous" role="switch"></label>
+              </div>
+            </div>
+
+            <div class="glass platter" id="gen-passphrase-options" data-enter hidden>
+              <div class="platter-header"><h2>Passphrase options</h2></div>
+              <div class="rows">
+                <div class="row row-slider">
+                  <label class="row-title" for="gen-words">Words</label>
+                  <input type="range" class="slider" id="gen-words" min="3" max="12" step="1">
+                  <output class="slider-value" id="gen-words-value" for="gen-words"></output>
+                </div>
+                <div class="row">
+                  <label class="row-title" for="gen-separator">Separator</label>
+                  <select id="gen-separator" class="popup">
+                    <option value="-">Hyphen</option>
+                    <option value=" ">Space</option>
+                    <option value=".">Period</option>
+                    <option value="_">Underscore</option>
+                    <option value=",">Comma</option>
+                  </select>
+                </div>
+                <label class="row row-switch"><span class="row-title">Capitalize words</span>
+                  <input type="checkbox" class="switch" id="gen-capitalize" role="switch"></label>
+                <label class="row row-switch"><span class="row-title">Add a number</span>
+                  <input type="checkbox" class="switch" id="gen-number" role="switch"></label>
+              </div>
+              <p class="platter-note">Words come from the <a href="https://www.eff.org/dice" target="_blank" rel="noopener">EFF large wordlist</a> (CC BY 3.0 US).</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================ VAULT GATE (locked / no vault yet) ============================ -->
+      <section class="view" id="view-gate" data-view="gate" aria-labelledby="gate-title" hidden>
+        <header class="toolbar">
+          <button type="button" class="tb-btn glass-capsule sidebar-toggle" data-action="toggle-sidebar" aria-label="Show or hide the sidebar" title="Show or hide the sidebar"><i data-icon="panel-left"></i></button>
+          <div class="toolbar-title"><h1 id="gate-title">Vault</h1></div>
+        </header>
+        <div class="view-body view-body-center">
+          <!-- Unlock -->
+          <form class="glass gate-card" id="unlock-form" novalidate hidden>
+            <div class="lock-badge" id="lock-badge" aria-hidden="true">
+              <svg viewBox="0 0 48 48" class="lock-glyph">
+                <path class="lock-shackle" d="M15 21v-6a9 9 0 0 1 18 0v6"/>
+                <rect class="lock-body" x="10" y="21" width="28" height="21" rx="5"/>
+                <circle class="lock-dot" cx="24" cy="31.5" r="2.6"/>
+              </svg>
+            </div>
+            <h2 class="gate-title">Vault Locked</h2>
+            <p class="gate-lead">Enter your master password to unlock.</p>
+            <div class="login-field" id="unlock-field">
+              <label class="sr-only" for="unlock-password">Master password</label>
+              <input type="password" id="unlock-password" placeholder="Master password" autocomplete="current-password" maxlength="1024" spellcheck="false">
+              <button type="submit" class="login-go" id="unlock-submit" aria-label="Unlock"><i data-icon="arrow-right"></i></button>
+            </div>
+            <p class="gate-message" id="unlock-message" role="status" aria-live="polite"></p>
+          </form>
+
+          <!-- Create (first run) -->
+          <form class="glass gate-card gate-card-wide" id="create-form" novalidate hidden>
+            <span class="gate-symbol" data-tint="green"><i data-icon="vault"></i></span>
+            <h2 class="gate-title">Create Your Vault</h2>
+            <p class="gate-lead">Choose a master password. It encrypts everything in the vault and is never stored — if you forget it, the vault can’t be recovered.</p>
+            <div class="form-rows">
+              <div class="secure-field input-field">
+                <label class="sr-only" for="create-password">Master password</label>
+                <input type="password" id="create-password" placeholder="Master password" autocomplete="new-password" maxlength="1024" spellcheck="false">
+                <button type="button" class="field-btn" data-reveal="create-password" aria-label="Show password"><i data-icon="eye"></i></button>
+              </div>
+              <div class="meter meter-thin" id="create-meter" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+              <div class="secure-field input-field">
+                <label class="sr-only" for="create-confirm">Confirm master password</label>
+                <input type="password" id="create-confirm" placeholder="Confirm master password" autocomplete="new-password" maxlength="1024" spellcheck="false">
+                <button type="button" class="field-btn" data-reveal="create-confirm" aria-label="Show password"><i data-icon="eye"></i></button>
+              </div>
+            </div>
+            <ul class="checklist" id="create-checks" aria-label="Master password requirements">
+              <li data-check="length">At least 15 characters</li>
+              <li data-check="guess">Hard to guess — no common words, names or patterns</li>
+              <li data-check="breach">Not found in known data breaches</li>
+              <li data-check="match">Both passwords match</li>
+            </ul>
+            <div class="gate-tip">
+              <p>A passphrase of six random words is strong and easy to remember.</p>
+              <button type="button" class="btn btn-small btn-tinted" id="create-suggest"><i data-icon="sparkles"></i><span>Suggest One</span></button>
+            </div>
+            <p class="gate-note" id="legacy-note" hidden></p>
+            <button type="submit" class="btn btn-primary btn-large" id="create-submit">Create Vault</button>
+          </form>
+
+          <div class="gate-card gate-loading" id="gate-loading" hidden><span class="spinner" aria-label="Opening the vault"></span></div>
+        </div>
+      </section>
+
+      <!-- ============================ VAULT LIST + DETAIL ============================ -->
+      <section class="view view-vault" id="view-vault" data-view="vault" aria-labelledby="vault-title" hidden>
+        <header class="toolbar">
+          <button type="button" class="tb-btn glass-capsule sidebar-toggle" data-action="toggle-sidebar" aria-label="Show or hide the sidebar" title="Show or hide the sidebar"><i data-icon="panel-left"></i></button>
+          <div class="toolbar-title">
+            <h1 id="vault-title">All Items</h1>
+            <p class="toolbar-subtitle" id="vault-subtitle"></p>
+          </div>
+          <div class="toolbar-actions">
+            <label class="search-field glass-capsule">
+              <i data-icon="search"></i>
+              <input type="search" id="vault-search" placeholder="Search" aria-label="Search the vault" autocomplete="off" spellcheck="false">
+            </label>
+            <button type="button" class="tb-btn glass-capsule" id="vault-empty-trash" title="Delete everything in Recently Deleted" hidden><span>Delete All</span></button>
+            <button type="button" class="tb-btn glass-capsule" id="vault-new" aria-label="New item" title="New item (Ctrl+N)"><i data-icon="plus"></i></button>
+          </div>
+        </header>
+        <div class="split">
+          <div class="glass list-pane" data-enter>
+            <div class="list-header">
+              <label class="sr-only" for="vault-sort">Sort items</label>
+              <select id="vault-sort" class="popup popup-plain">
+                <option value="name">Sorted by Name</option>
+                <option value="recent">Sorted by Date Modified</option>
+                <option value="type">Sorted by Type</option>
+              </select>
+            </div>
+            <div class="list-scroll" id="vault-list" role="listbox" aria-label="Items" tabindex="0"></div>
+          </div>
+          <div class="glass detail-pane" id="vault-detail" data-enter></div>
+        </div>
+      </section>
+
+      <!-- ============================ VERIFICATION CODES ============================ -->
+      <section class="view" id="view-codes" data-view="codes" aria-labelledby="codes-title" hidden>
+        <header class="toolbar">
+          <button type="button" class="tb-btn glass-capsule sidebar-toggle" data-action="toggle-sidebar" aria-label="Show or hide the sidebar" title="Show or hide the sidebar"><i data-icon="panel-left"></i></button>
+          <div class="toolbar-title">
+            <h1 id="codes-title">Verification Codes</h1>
+            <p class="toolbar-subtitle" id="codes-subtitle"></p>
+          </div>
+          <div class="toolbar-actions">
+            <label class="search-field glass-capsule">
+              <i data-icon="search"></i>
+              <input type="search" id="codes-search" placeholder="Search" aria-label="Search verification codes" autocomplete="off" spellcheck="false">
+            </label>
+          </div>
+        </header>
+        <div class="view-body">
+          <div class="codes-grid" id="codes-grid"></div>
+        </div>
+      </section>
+
+      <!-- ============================ SECURITY ============================ -->
+      <section class="view" id="view-security" data-view="security" aria-labelledby="security-title" hidden>
+        <header class="toolbar">
+          <button type="button" class="tb-btn glass-capsule sidebar-toggle" data-action="toggle-sidebar" aria-label="Show or hide the sidebar" title="Show or hide the sidebar"><i data-icon="panel-left"></i></button>
+          <div class="toolbar-title"><h1 id="security-title">Security</h1></div>
+          <div class="toolbar-actions">
+            <button type="button" class="tb-btn glass-capsule tb-btn-label" id="security-scan" title="Checks every saved password against Have I Been Pwned — only 5-character hash prefixes are sent"><i data-icon="shield-check"></i><span>Check for Breaches</span></button>
+          </div>
+        </header>
+        <div class="view-body">
+          <div class="column column-wide" id="security-body"></div>
+        </div>
+      </section>
+
+      <!-- ============================ SETTINGS ============================ -->
+      <section class="view" id="view-settings" data-view="settings" aria-labelledby="settings-title" hidden>
+        <header class="toolbar">
+          <button type="button" class="tb-btn glass-capsule sidebar-toggle" data-action="toggle-sidebar" aria-label="Show or hide the sidebar" title="Show or hide the sidebar"><i data-icon="panel-left"></i></button>
+          <div class="toolbar-title"><h1 id="settings-title">Settings</h1></div>
+        </header>
+        <div class="view-body">
+          <div class="column">
+            <div class="glass platter" data-enter>
+              <div class="platter-header"><h2>Appearance</h2></div>
+              <div class="rows">
+                <div class="row row-accent">
+                  <span class="row-title" id="accent-label">Accent colour</span>
+                  <div class="accent-picker" id="accent-picker" role="radiogroup" aria-labelledby="accent-label"></div>
+                </div>
+                <label class="row row-switch"><span class="row-title">Matrix rain background</span>
+                  <input type="checkbox" class="switch" data-setting="matrixBackground" role="switch"></label>
+                <div class="row row-slider" id="intensity-row">
+                  <label class="row-title" for="set-intensity">Rain brightness</label>
+                  <input type="range" class="slider" id="set-intensity" min="10" max="100" step="5" data-setting="backgroundIntensity" data-type="number">
+                  <output class="slider-value" id="set-intensity-value" for="set-intensity"></output>
+                </div>
+                <label class="row row-switch">
+                  <span class="row-text"><span class="row-title">Reduce motion</span>
+                    <span class="row-subtitle">Turns off springy animations and the decoding effect.</span></span>
+                  <input type="checkbox" class="switch" data-setting="reduceMotion" role="switch"></label>
+                <label class="row row-switch">
+                  <span class="row-text"><span class="row-title">Reduce transparency</span>
+                    <span class="row-subtitle">Uses solid backgrounds instead of glass. Can make the app faster on older computers.</span></span>
+                  <input type="checkbox" class="switch" data-setting="reduceTransparency" role="switch"></label>
+              </div>
+            </div>
+
+            <div class="glass platter" data-enter>
+              <div class="platter-header"><h2>Vault security</h2></div>
+              <div class="rows">
+                <div class="row">
+                  <label class="row-title" for="set-autolock">Lock the vault after</label>
+                  <select id="set-autolock" class="popup" data-setting="autoLockMinutes" data-type="number">
+                    <option value="1">1 minute</option>
+                    <option value="5">5 minutes</option>
+                    <option value="15">15 minutes</option>
+                    <option value="30">30 minutes</option>
+                    <option value="60">1 hour</option>
+                    <option value="0">Never</option>
+                  </select>
+                </div>
+                <label class="row row-switch"><span class="row-title">Lock when the window is minimised</span>
+                  <input type="checkbox" class="switch" data-setting="lockOnMinimize" role="switch"></label>
+                <div class="row">
+                  <label class="row-title" for="set-clipboard">Clear copied passwords after</label>
+                  <select id="set-clipboard" class="popup" data-setting="clipboardClearSeconds" data-type="number">
+                    <option value="15">15 seconds</option>
+                    <option value="30">30 seconds</option>
+                    <option value="60">1 minute</option>
+                    <option value="120">2 minutes</option>
+                    <option value="0">Never</option>
+                  </select>
+                </div>
+                <div class="row">
+                  <span class="row-text"><span class="row-title">Master password</span>
+                    <span class="row-subtitle" id="set-master-note">Unlock the vault to change it.</span></span>
+                  <button type="button" class="btn btn-secondary btn-small" id="set-change-master" disabled>Change…</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="glass platter" data-enter>
+              <div class="platter-header"><h2>Import and backup</h2></div>
+              <div class="rows">
+                <div class="row">
+                  <span class="row-text"><span class="row-title">Import passwords</span>
+                    <span class="row-subtitle">From a CSV export of Chrome, Edge, Firefox, Safari, Bitwarden, 1Password, KeePassXC or LastPass.</span></span>
+                  <button type="button" class="btn btn-secondary btn-small" id="set-import-csv" data-needs-vault>Choose File…</button>
+                </div>
+                <div class="row">
+                  <span class="row-text"><span class="row-title">Export an encrypted backup</span>
+                    <span class="row-subtitle">A copy of the vault that stays locked with your master password.</span></span>
+                  <button type="button" class="btn btn-secondary btn-small" id="set-export" data-needs-vault>Export…</button>
+                </div>
+                <div class="row">
+                  <span class="row-text"><span class="row-title">Restore from a backup</span>
+                    <span class="row-subtitle">Adds the items from a backup that aren’t in this vault yet.</span></span>
+                  <button type="button" class="btn btn-secondary btn-small" id="set-import-backup" data-needs-vault>Choose Backup…</button>
+                </div>
+              </div>
+              <p class="platter-note" id="set-vault-note">Unlock the vault to import or back up.</p>
+            </div>
+
+            <div class="glass platter" data-enter>
+              <div class="platter-header"><h2>General</h2></div>
+              <div class="rows">
+                <label class="row row-switch"><span class="row-title">Clear the Analyzer when leaving it</span>
+                  <input type="checkbox" class="switch" data-setting="clearAnalyzerOnBack" role="switch"></label>
+                <label class="row row-switch"><span class="row-title">Show the sign-in screen at startup</span>
+                  <input type="checkbox" class="switch" data-setting="showLoginOnStart" role="switch"></label>
+                <div class="row">
+                  <span class="row-text"><span class="row-title">Account</span>
+                    <span class="row-subtitle">Not signed in. Sync is coming soon.</span></span>
+                  <button type="button" class="btn btn-secondary btn-small" id="set-signin">Sign In…</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="glass platter" data-enter>
+              <div class="platter-header"><h2>Keyboard shortcuts</h2></div>
+              <dl class="shortcut-list" id="shortcut-list"></dl>
+            </div>
+
+            <div class="glass platter about" data-enter>
+              <img src="img/app-icon.svg" alt="" width="64" height="64" class="about-icon">
+              <div class="about-text">
+                <h2>Password Helper</h2>
+                <p id="about-version">Version</p>
+                <p class="about-path" id="about-path"></p>
+              </div>
+              <div class="about-actions">
+                <button type="button" class="btn btn-secondary btn-small" id="set-open-data"><i data-icon="folder-open"></i><span>Data Folder</span></button>
+                <a class="btn btn-secondary btn-small" href="https://github.com/Radu-24/Password-Helper" target="_blank" rel="noopener"><i data-icon="external-link"></i><span>Source Code</span></a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
 </body>
 </html>

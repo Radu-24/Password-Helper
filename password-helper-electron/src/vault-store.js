@@ -22,6 +22,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
+const Otp = require('../public/js/otp.js');
 
 const FORMAT = 'password-helper-vault';
 const VERSION = 1;
@@ -34,11 +35,14 @@ const IV_BYTES = 12;
 const KEY_BYTES = 32;
 
 const TYPES = Object.freeze(['Website', 'App', 'Email', 'Other']);
-const LIMITS = Object.freeze({ label: 200, username: 320, password: 1024, notes: 10000, master: 1024 });
+const LIMITS = Object.freeze({ label: 200, username: 320, password: 1024, notes: 10000, master: 1024, url: 2048 });
 
 /** Unlock attempts allowed before a growing delay kicks in. */
 const FREE_ATTEMPTS = 3;
 const MAX_DELAY_MS = 30_000;
+/** Deleted items stay in "Recently Deleted" this long before they are removed for good. */
+const TRASH_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 class VaultError extends Error {
   /**
@@ -127,7 +131,14 @@ function validateFile(file) {
 // Entry validation
 // ---------------------------------------------------------------------------
 
-const FIELD_NAMES = { label: 'label', username: 'username', password: 'password', notes: 'notes', master: 'master password' };
+const FIELD_NAMES = {
+  label: 'title',
+  username: 'username',
+  password: 'password',
+  notes: 'notes',
+  master: 'master password',
+  url: 'web address',
+};
 
 function cleanText(value, field, { required = false, trim = true } = {}) {
   const name = FIELD_NAMES[field];
@@ -141,40 +152,111 @@ function cleanText(value, field, { required = false, trim = true } = {}) {
   return text;
 }
 
-/** Validates user-supplied fields; returns only the known ones. */
-function cleanFields(fields) {
+/** "github.com" → "https://github.com/". Only http(s) addresses are accepted. */
+function cleanUrl(value) {
+  const text = cleanText(value, 'url');
+  if (!text) return '';
+  const invalid = () => new VaultError('INVALID', 'Enter a valid web address, like example.com.');
+  if (/\s/.test(text)) throw invalid();
+  let parsed;
+  try {
+    parsed = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`);
+  } catch {
+    throw invalid();
+  }
+  const hostOk = parsed.hostname.includes('.') || parsed.hostname === 'localhost';
+  if (!['http:', 'https:'].includes(parsed.protocol) || !hostOk) throw invalid();
+  return parsed.href;
+}
+
+/**
+ * Two-factor setup: undefined keeps the current one, null/'' removes it,
+ * a string is parsed (otpauth:// link or Base32 key), an object is re-checked.
+ */
+function cleanTotp(value, existing) {
+  if (value === undefined) return existing ? existing.totp || null : null;
+  if (value === null || value === '') return null;
+  if (typeof value === 'string') {
+    try {
+      return Otp.parseOtpInput(value);
+    } catch (error) {
+      throw new VaultError('INVALID', error.message);
+    }
+  }
+  const clean = Otp.sanitizeConfig(value);
+  if (!clean) throw new VaultError('INVALID', 'That two-factor setup is not valid.');
+  return clean;
+}
+
+/**
+ * Validates user-supplied fields; returns only the known ones.
+ * @param {object} fields
+ * @param {object|null} [existing]  the entry being edited (keeps its favourite / 2FA when not sent)
+ */
+function cleanFields(fields, existing = null) {
   if (!fields || typeof fields !== 'object') throw new VaultError('INVALID', 'Missing entry fields.');
   return {
     label: cleanText(fields.label, 'label', { required: true }),
     type: TYPES.includes(fields.type) ? fields.type : 'Other',
     username: cleanText(fields.username, 'username'),
     password: cleanText(fields.password, 'password', { required: true, trim: false }),
+    url: cleanUrl(fields.url),
     notes: cleanText(fields.notes, 'notes'),
+    favorite: typeof fields.favorite === 'boolean' ? fields.favorite : Boolean(existing && existing.favorite),
+    totp: cleanTotp(fields.totp, existing),
   };
 }
 
-/** Accepts entries from the old localStorage format ({ user, pass }) too. */
+/** Fills in fields added after the entry was saved (older vaults, backups). */
+function upgradeEntry(entry) {
+  return { url: '', favorite: false, totp: null, deletedAt: null, ...entry };
+}
+
+const isIsoDate = (value) => typeof value === 'string' && !Number.isNaN(Date.parse(value));
+
+/**
+ * Accepts entries from backups, CSV imports and the old localStorage format
+ * ({ user, pass }). A bad web address or 2FA setup is dropped, not fatal.
+ */
 function normalizeImported(raw, now) {
+  let url = '';
+  let notes = typeof raw.notes === 'string' ? raw.notes : '';
+  try {
+    url = cleanUrl(typeof raw.url === 'string' ? raw.url : '');
+  } catch {
+    if (raw.url) notes = `${notes}${notes ? '\n' : ''}Address: ${String(raw.url).slice(0, 500)}`.slice(0, LIMITS.notes);
+  }
+  let totp;
+  try {
+    totp = raw.totp ? cleanTotp(raw.totp, null) : null;
+  } catch {
+    totp = null;
+  }
   const fields = cleanFields({
     label: raw.label,
     type: raw.type,
     username: raw.username ?? raw.user,
     password: raw.password ?? raw.pass,
-    notes: raw.notes,
+    url,
+    notes,
+    favorite: raw.favorite === true,
+    totp,
   });
-  const isoOr = (value) => (typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : now);
+  const isoOr = (value) => (isIsoDate(value) ? value : now);
   return {
     id: typeof raw.id === 'string' && /^[\w-]{8,64}$/.test(raw.id) ? raw.id : crypto.randomUUID(),
     ...fields,
     createdAt: isoOr(raw.createdAt),
     updatedAt: isoOr(raw.updatedAt),
+    // Items that were in "Recently Deleted" (e.g. in a backup) stay there.
+    deletedAt: isIsoDate(raw.deletedAt) ? raw.deletedAt : null,
   };
 }
 
-/** What pages get from list(): everything except the password. */
+/** What pages get from list(): no password and no 2FA secret. */
 function publicEntry(entry) {
-  const { password: _password, ...rest } = entry;
-  return rest;
+  const { password: _password, totp, ...rest } = upgradeEntry(entry);
+  return { ...rest, hasTotp: Boolean(totp) };
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +368,16 @@ class VaultStore {
     if (this.key) this.key.fill(0);
     this.key = key;
     this.header = { format: file.format, version: file.version, kdf: { ...file.kdf }, cipher: { name: CIPHER_NAME } };
-    this.entries = payload.entries;
+    this.entries = payload.entries.map(upgradeEntry);
+    if (this.dropExpiredDeletions() > 0) await this.save();
+  }
+
+  /** Removes items that have been in "Recently Deleted" for more than TRASH_DAYS. */
+  dropExpiredDeletions() {
+    const cutoff = this.now() - TRASH_DAYS * DAY_MS;
+    const before = this.entries.length;
+    this.entries = this.entries.filter((entry) => !entry.deletedAt || Date.parse(entry.deletedAt) > cutoff);
+    return before - this.entries.length;
   }
 
   lock() {
@@ -323,17 +414,44 @@ class VaultStore {
 
   // ---- entries --------------------------------------------------------------
 
+  /** Every item, including those in "Recently Deleted" (they have a `deletedAt` date). */
   list() {
     this.assertUnlocked();
     return this.entries.map(publicEntry);
   }
 
-  /** Full entry including the password — main process only (copy / reveal / edit). */
+  /** Items that are not in "Recently Deleted". */
+  activeEntries() {
+    this.assertUnlocked();
+    return this.entries.filter((entry) => !entry.deletedAt).map((entry) => upgradeEntry({ ...entry }));
+  }
+
+  /** Full entry including the password and 2FA secret — main process only. */
   getEntry(id) {
     this.assertUnlocked();
-    const entry = this.entries.find((item) => item.id === id);
-    if (!entry) throw new VaultError('NOT_FOUND', 'That entry no longer exists.');
-    return { ...entry };
+    return upgradeEntry({ ...this.find(id) });
+  }
+
+  /**
+   * What the edit form needs: the password, but only a description of the 2FA
+   * setup (the secret itself stays here; saving without `totp` keeps it).
+   */
+  getEditable(id) {
+    const { totp, ...entry } = this.getEntry(id);
+    return {
+      ...entry,
+      hasTotp: Boolean(totp),
+      totpInfo: totp ? { issuer: totp.issuer, account: totp.account, digits: totp.digits, period: totp.period, algorithm: totp.algorithm } : null,
+    };
+  }
+
+  /** Favourites don't change "last modified". */
+  async setFavorite(id, favorite) {
+    this.assertUnlocked();
+    const entry = this.findActive(id);
+    entry.favorite = Boolean(favorite);
+    await this.save();
+    return publicEntry(entry);
   }
 
   /** @returns {object} the new entry without its password */
@@ -348,20 +466,50 @@ class VaultStore {
 
   async update(id, fields) {
     this.assertUnlocked();
-    const index = this.entries.findIndex((item) => item.id === id);
-    if (index === -1) throw new VaultError('NOT_FOUND', 'That entry no longer exists.');
-    const updated = { ...this.entries[index], ...cleanFields(fields), updatedAt: new Date(this.now()).toISOString() };
-    this.entries[index] = updated;
+    const existing = this.findActive(id);
+    const updated = { ...existing, ...cleanFields(fields, existing), updatedAt: new Date(this.now()).toISOString() };
+    this.entries[this.entries.indexOf(existing)] = updated;
     await this.save();
     return publicEntry(updated);
   }
 
+  /** Moves an item to "Recently Deleted" (kept for TRASH_DAYS, then removed for good). */
   async remove(id) {
     this.assertUnlocked();
-    const index = this.entries.findIndex((item) => item.id === id);
-    if (index === -1) throw new VaultError('NOT_FOUND', 'That entry no longer exists.');
-    this.entries.splice(index, 1);
+    const entry = this.find(id);
+    if (!entry.deletedAt) {
+      entry.deletedAt = new Date(this.now()).toISOString();
+      await this.save();
+    }
+    return publicEntry(entry);
+  }
+
+  /** Brings an item back from "Recently Deleted". */
+  async restore(id) {
+    this.assertUnlocked();
+    const entry = this.find(id);
+    if (entry.deletedAt) {
+      entry.deletedAt = null;
+      await this.save();
+    }
+    return publicEntry(entry);
+  }
+
+  /** Deletes an item permanently. */
+  async purge(id) {
+    this.assertUnlocked();
+    this.entries.splice(this.entries.indexOf(this.find(id)), 1);
     await this.save();
+  }
+
+  /** Permanently deletes everything in "Recently Deleted". @returns {Promise<number>} how many */
+  async emptyTrash() {
+    this.assertUnlocked();
+    const before = this.entries.length;
+    this.entries = this.entries.filter((entry) => !entry.deletedAt);
+    const removed = before - this.entries.length;
+    if (removed > 0) await this.save();
+    return removed;
   }
 
   /**
@@ -374,7 +522,7 @@ class VaultStore {
     if (!Array.isArray(rawEntries)) throw new VaultError('INVALID', 'Nothing to import.');
     const nowIso = new Date(this.now()).toISOString();
     const ids = new Set(this.entries.map((entry) => entry.id));
-    const fingerprints = new Set(this.entries.map(fingerprint));
+    const fingerprints = new Set(this.entries.filter((entry) => !entry.deletedAt).map(fingerprint));
     let added = 0;
     let skipped = 0;
     for (const raw of rawEntries) {
@@ -435,6 +583,19 @@ class VaultStore {
 
   assertUnlocked() {
     if (!this.key) throw new VaultError('LOCKED', 'The vault is locked.');
+  }
+
+  find(id) {
+    const entry = this.entries.find((item) => item.id === id);
+    if (!entry) throw new VaultError('NOT_FOUND', 'That entry no longer exists.');
+    return entry;
+  }
+
+  /** Like find(), but items in "Recently Deleted" can't be changed until they're recovered. */
+  findActive(id) {
+    const entry = this.find(id);
+    if (entry.deletedAt) throw new VaultError('INVALID', 'Recover this item before changing it.');
+    return entry;
   }
 
   async readFile() {
@@ -501,4 +662,4 @@ async function writeFileAtomic(filePath, contents, { backup = true } = {}) {
   }
 }
 
-module.exports = { VaultStore, VaultError, TYPES, LIMITS, DEFAULT_ITERATIONS, writeFileAtomic };
+module.exports = { VaultStore, VaultError, TYPES, LIMITS, DEFAULT_ITERATIONS, TRASH_DAYS, writeFileAtomic };

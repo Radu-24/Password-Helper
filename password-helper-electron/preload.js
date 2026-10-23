@@ -33,9 +33,14 @@ function subscribe(channel, callback) {
 }
 
 contextBridge.exposeInMainWorld('api', {
+  /** 'darwin' | 'win32' | 'linux' — macOS draws its own window buttons. */
+  platform: process.platform,
+
   window: {
     /** @param {'minimize'|'toggle-maximize'|'close'} action */
     control: (action) => ipcRenderer.send('window:control', action),
+    onFocusChange: (callback) => subscribe('window:focus', callback),
+    onMaximizedChange: (callback) => subscribe('window:maximized', callback),
   },
 
   /** zxcvbn-ts analysis (runs in the main process). */
@@ -47,6 +52,8 @@ contextBridge.exposeInMainWorld('api', {
   app: {
     info: () => invoke('app:info'),
     openDataFolder: () => invoke('app:open-data-folder'),
+    /** Opens an http(s) address in the default browser. */
+    openUrl: (url) => invoke('app:open-url', url),
     purgeLegacyStorage: () => invoke('app:purge-legacy-storage'),
   },
 
@@ -67,12 +74,26 @@ contextBridge.exposeInMainWorld('api', {
     lock: () => invoke('vault:lock'),
     touch: () => invoke('vault:touch'),
     list: () => invoke('vault:list'),
+    /** One entry for the editor: password included, 2FA described but not its secret. */
     get: (id) => invoke('vault:get', id),
     reveal: (id) => invoke('vault:reveal', id),
+    /** @param {'password'|'username'|'url'|'totp'} field */
     copy: (id, field) => invoke('vault:copy', id, field),
+    setFavorite: (id, favorite) => invoke('vault:set-favorite', id, favorite),
+    /** Current 2FA codes: [{ id, code, period, remaining }] (all entries with 2FA when `ids` is omitted). */
+    totpCodes: (ids) => invoke('vault:totp', ids),
+    /** Text of a QR code found in the image on the clipboard. */
+    readQrFromClipboard: () => invoke('vault:read-qr'),
+    /** Checks a 2FA setup key / otpauth:// link and returns its current code (nothing is saved). */
+    previewTotp: (input) => invoke('vault:preview-totp', input),
     add: (fields) => invoke('vault:add', fields),
     update: (id, fields) => invoke('vault:update', id, fields),
+    /** Moves an item to Recently Deleted. */
     remove: (id) => invoke('vault:remove', id),
+    restore: (id) => invoke('vault:restore', id),
+    /** Deletes an item permanently. */
+    purge: (id) => invoke('vault:purge', id),
+    emptyTrash: () => invoke('vault:empty-trash'),
     importLegacy: (entries) => invoke('vault:import-legacy', entries),
     changePassword: (current, next) => invoke('vault:change-password', current, next),
     checkBreaches: () => invoke('vault:check-breaches'),
@@ -82,5 +103,15 @@ contextBridge.exposeInMainWorld('api', {
     /** @returns {() => void} unsubscribe */
     onLocked: (callback) => subscribe('vault:locked', callback),
     onUnlocked: (callback) => subscribe('vault:unlocked', callback),
+  },
+
+  /** Import from a browser / password-manager CSV export (parsed in the main process). */
+  csvImport: {
+    /** Opens a file picker; resolves to a preview ({ fileName, format, count, … }) or null if cancelled. */
+    choose: () => invoke('import:choose-csv'),
+    commit: () => invoke('import:commit-csv'),
+    /** Moves the (plain-text) export file to the trash. */
+    trashFile: () => invoke('import:trash-csv'),
+    cancel: () => invoke('import:cancel'),
   },
 });
