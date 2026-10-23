@@ -1,26 +1,18 @@
-# Byte-compiled / cache
-__pycache__/
-*.py[cod]
-*.pyo
+# Node / Electron
+node_modules/
+dist/
+out/
+test-results/
+playwright-report/
+coverage/
+*.log
 
-# Virtual environments
-.venv/
-env/
-venv/
-ENV/
-*.env
+# Environment / secrets
+.env
+.env.*
 
-# VSCode / PyCharm / other IDEs
+# Editors / OS
 .vscode/
 .idea/
-
-# macOS
 .DS_Store
-
-# Windows
 Thumbs.db
-
-# PyInstaller build artifacts
-build/
-dist/
-*.spec

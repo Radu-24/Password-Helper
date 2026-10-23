@@ -1,19 +1,83 @@
 {
   "name": "password-helper-electron",
-  "version": "1.0.0",
+  "productName": "Password Helper",
+  "version": "1.1.0",
+  "description": "Privacy-first password analyzer and encrypted vault — Electron desktop client.",
   "main": "main.js",
+  "desktopName": "password-helper.desktop",
+  "private": true,
+  "author": "Matei Radu",
+  "license": "MIT",
+  "homepage": "https://github.com/Radu-24/Password-Helper",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Radu-24/Password-Helper.git"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "devDependencies": {
-    "electron": "^36.2.1"
+    "test": "node --test \"tests/unit/**/*.test.js\"",
+    "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "check": "npm run lint && npm test && npm run test:e2e",
+    "dist": "electron-builder",
+    "dist:linux": "electron-builder --linux AppImage deb",
+    "dist:win": "electron-builder --win nsis"
   },
   "dependencies": {
-    "password-helper-electron": "file:"
+    "@zxcvbn-ts/core": "^4.2.0",
+    "@zxcvbn-ts/language-common": "^4.1.3",
+    "@zxcvbn-ts/language-en": "^4.1.1",
+    "@zxcvbn-ts/language-ro": "^4.1.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "electron": "^44.9.3",
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0"
+  },
+  "build": {
+    "appId": "io.github.radu24.passwordhelper",
+    "productName": "Password Helper",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "maintainer": "Matei Radu <115228230+Radu-24@users.noreply.github.com>",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

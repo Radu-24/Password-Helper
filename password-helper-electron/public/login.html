@@ -1,426 +1,54 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="stylesheet" href="titlebar.css">
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Password Helper – Login</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      width: 100%; height: 100%;
-      overflow: hidden;
-      background: black;
-      color: white;
-      font-family: 'Segoe UI', sans-serif;
-    }
-    body { opacity: 0; transition: opacity 0.5s ease; }
-    body.loaded { opacity: 1; }
-
-    canvas#matrixCanvas {
-      position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%;
-      z-index: 0;
-      pointer-events: none;
-      filter: blur(2.5px) brightness(1.3);
-      opacity: 0.75;
-    }
-
-    .titlebar {
-      position: absolute; top: 0; left: 0;
-      width: 100%; height: 40px;
-      background: #121212cc; -webkit-app-region: drag;
-      display: flex; justify-content: flex-end; align-items: center;
-      padding: 0 10px; z-index: 9999;
-    }
-    .titlebar button {
-      -webkit-app-region: no-drag;
-      width: 14px; height: 14px;
-      margin-left: 12px;
-      border: none; border-radius: 50%;
-      cursor: pointer;
-      background: transparent;
-    }
-    .titlebar .min { background: #ffbd2e; }
-    .titlebar .max { background: #27c93f; }
-    .titlebar .close { background: #ff5f56; }
-
-    .screen {
-      position: absolute; top: 0; left: 0;
-      width: 100%; height: 100vh;
-      display: flex; align-items: center; justify-content: center;
-      transform: translateY(20px); opacity: 0; pointer-events: none;
-      transition: transform 0.6s cubic-bezier(.17,.67,.83,.67), opacity 0.6s ease;
-      z-index: 2;
-    }
-    .screen.active {
-      transform: translateY(0); opacity: 1; pointer-events: auto;
-    }
-
-    .card {
-      position: relative;
-      background: rgba(30, 30, 30, 0.4);
-      border-radius: 20px;
-      overflow: hidden;
-      backdrop-filter: blur(50px);
-      box-shadow:
-        0 20px 60px rgba(0, 0, 0, 0.5),
-        inset 0 0 30px rgba(255, 255, 255, 0.05),
-        inset 0 0 10px rgba(0, 0, 0, 0.2);
-      width: 100%;
-      max-width: 480px;
-      text-align: center;
-      transition: height 0.4s ease, padding 0.4s ease;
-      padding: 50px 40px;
-      height: 460px; 
-    }
-
-    .card.expanded { height: 600px; }
-    .card.register { padding-top: 40px; }
-
-    .card h1 {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 24px;
-      font-size: 38px;
-      font-weight: 600;
-      background: linear-gradient(to right, #00ffff, #7289da);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-
-    .card h1::before {
-      content: "🔐";
-      font-size: 34px;
-    }
-
-    .card form {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .card input {
-      padding: 16px;
-      font-size: 18px;
-      border: 1px solid rgba(255, 255, 255, 0);
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.05);
-      color: white;
-      backdrop-filter: blur(10px);
-      outline: none;
-      transition: border-color 0.2s ease, background 0.2s ease;
-      width: 100%;
-    }
-
-    .card input:focus {
-      border-color: #00ffff;
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .input-wrapper {
-      position: relative;
-    }
-
-    .input-wrapper img {
-      position: absolute;
-      top: 50%;
-      right: 14px;
-      transform: translateY(-50%);
-      width: 20px;
-      height: 20px;
-      cursor: pointer;
-      opacity: 0.7;
-    }
-
-    #passwordRequirements {
-      list-style: none;
-      text-align: left;
-      margin-top: 8px;
-      padding-left: 5px;
-      font-size: 12px;
-      color: #aaa;
-      opacity: 0;
-      max-height: 0;
-      overflow: hidden;
-      transition: opacity 0.4s ease, max-height 0.4s ease;
-    }
-
-    #passwordRequirements.active {
-      opacity: 0.8;
-      max-height: 150px;
-    }
-
-    .btn {
-      display: block;
-      width: 80%;
-      margin: 15px auto 0;
-      background: linear-gradient(135deg, #00ffff, #7289da);
-      color: white;
-      border: none;
-      border-radius: 14px;
-      padding: 16px 28px;
-      font-size: 17px;
-      cursor: pointer;
-      transition: transform 0.3s ease, background 0.3s ease;
-      box-shadow: 0 0 15px rgba(0,255,255,0.3);
-    }
-
-    .btn:hover {
-      transform: scale(1.05);
-      background: linear-gradient(135deg, #00cccc, #5b6eae);
-    }
-
-    .btn.outline {
-      background: transparent;
-      border: 2px solid #00ffff;
-    }
-
-    .btn.outline:hover {
-      background: rgba(0, 255, 255, 0.1);
-    }
-
-    #toggleMode {
-      display: inline-block;
-      margin-top: 15px;
-      color: #00ffff;
-      font-size: 15px;
-      text-decoration: none;
-    }
-
-    #toggleMode:hover {
-      text-decoration: underline;
-    }
-
-    #toast-container {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      z-index: 99999;
-    }
-
-    .toast {
-      background: rgba(0, 0, 0, 0.85);
-      color: #00ffff;
-      padding: 10px 20px;
-      border-radius: 16px;
-      font-size: 14px;
-      margin-top: 8px;
-      opacity: 1;
-      transform: translateY(0);
-      transition: transform 0.3s ease, opacity 0.3s ease;
-    }
-
-    .toast.shake {
-      animation: shake 0.5s ease;
-    }
-
-    .toast.fade-out {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-
-    @keyframes shake {
-      0%,100% { transform: translateY(0) translateX(0); }
-      25% { transform: translateY(0) translateX(-5px); }
-      75% { transform: translateY(0) translateX(5px); }
-    }
-  </style>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/login.css">
+  <script defer src="js/common.js"></script>
+  <script defer src="js/policy.js"></script>
+  <script defer src="js/strength.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/login.js"></script>
 </head>
 <body>
-  <div id="titlebar-container"></div>
-<script>
-  fetch('titlebar.html')
-    .then(res => res.text())
-    .then(html => {
-      document.getElementById('titlebar-container').innerHTML = html;
-    });
+  <section class="screen active" aria-labelledby="login-title">
+    <div class="card login-card" id="card">
+      <h1 id="login-title">Password Helper</h1>
 
-  function windowControl(action) {
-    const { ipcRenderer } = require('electron');
-    ipcRenderer.send('window-control', action);
-  }
-</script>
+      <form id="loginForm" data-mode="login">
+        <label class="sr-only" for="email">Email</label>
+        <input type="email" id="email" class="login-input" placeholder="Email" autocomplete="username" title="" required>
 
-<script> const { ipcRenderer } = require('electron'); </script>
-<canvas id="matrixCanvas"></canvas>
+        <div class="password-field">
+          <label class="sr-only" for="password">Password</label>
+          <input type="password" id="password" class="login-input" placeholder="Password"
+                 autocomplete="current-password" title="" required>
+          <button type="button" class="reveal-btn" id="togglePassword"><img src="icons/eye.png" alt=""></button>
+        </div>
 
-<div class="titlebar">
-  <button class="min" onclick="ipcRenderer.send('window-control','min')"></button>
-  <button class="max" onclick="ipcRenderer.send('window-control','max')"></button>
-  <button class="close" onclick="ipcRenderer.send('window-control','close')"></button>
-</div>
+        <div class="password-field hidden" id="confirmWrapper">
+          <label class="sr-only" for="confirmPassword">Confirm password</label>
+          <input type="password" id="confirmPassword" class="login-input" placeholder="Confirm Password" title=""
+                 autocomplete="new-password">
+          <button type="button" class="reveal-btn" id="toggleConfirmPassword"><img src="icons/eye.png" alt=""></button>
+        </div>
 
-<div class="screen active">
-  <div class="card" id="card">
-    <h1>Password Helper</h1>
-    <form id="loginForm" data-mode="login">
-      <input type="email" id="email" placeholder="Email" required />
-      
-      <div class="input-wrapper">
-        <input type="password" id="password" placeholder="Password" required style="padding-right: 40px;">
-        <img id="togglePassword" src="icons/eye-slash.png" alt="Toggle">
-      </div>
+        <ul id="passwordRequirements" aria-label="Password requirements">
+          <li data-check="length">At least 15 characters</li>
+          <li data-check="guess">Hard to guess — no common words, names or your e-mail</li>
+          <li data-check="breach">Not found in known data breaches</li>
+          <li data-check="match">Both passwords match</li>
+        </ul>
 
-      <div class="input-wrapper" id="confirmWrapper" style="display:none;">
-        <input type="password" id="confirmPassword" placeholder="Confirm Password" required style="padding-right: 40px;">
-        <img id="toggleConfirmPassword" src="icons/eye-slash.png" alt="Toggle">
-      </div>
+        <button type="submit" class="login-btn" id="submitBtn">Log In</button>
+      </form>
 
-      <ul id="passwordRequirements">
-        <li id="req-length">• At least 8 characters</li>
-        <li id="req-upper">• At least 1 uppercase</li>
-        <li id="req-lower">• At least 1 lowercase</li>
-        <li id="req-digit">• At least 1 number</li>
-        <li id="req-special">• At least 1 special character</li>
-      </ul>
-
-      <button type="submit" class="btn">Log In</button>
-    </form>
-    <button id="skipBtn" class="btn outline">Skip for now</button>
-    <a href="#" id="toggleMode">Create account</a>
-  </div>
-</div>
-
-<div id="toast-container"></div>
-
-<script>
-const toastCt = document.getElementById('toast-container');
-const form = document.getElementById('loginForm');
-const toggle = document.getElementById('toggleMode');
-const togglePass = document.getElementById('togglePassword');
-const passInput = document.getElementById('password');
-const requirements = document.getElementById('passwordRequirements');
-const card = document.getElementById('card');
-const confirmWrapper = document.getElementById('confirmWrapper');
-const confirmInput = document.getElementById('confirmPassword');
-const toggleConfirm = document.getElementById('toggleConfirmPassword');
-
-function showToast(message) {
-  const currentToasts = toastCt.querySelectorAll('.toast');
-  if (currentToasts.length >= 2) return;
-
-  const t = document.createElement('div');
-  t.className = 'toast shake';
-  t.textContent = message;
-  toastCt.appendChild(t);
-
-  setTimeout(() => t.classList.remove('shake'), 500);
-  setTimeout(() => {
-    t.classList.add('fade-out');
-    setTimeout(() => t.remove(), 300);
-  }, 3000);
-}
-
-const reqs = {
-  length: document.getElementById('req-length'),
-  upper: document.getElementById('req-upper'),
-  lower: document.getElementById('req-lower'),
-  digit: document.getElementById('req-digit'),
-  special: document.getElementById('req-special')
-};
-
-togglePass.onclick = () => {
-  passInput.type = (passInput.type === 'password') ? 'text' : 'password';
-  togglePass.src = (passInput.type === 'password') ? 'icons/eye-slash.png' : 'icons/eye.png';
-};
-
-toggleConfirm.onclick = () => {
-  confirmInput.type = (confirmInput.type === 'password') ? 'text' : 'password';
-  toggleConfirm.src = (confirmInput.type === 'password') ? 'icons/eye-slash.png' : 'icons/eye.png';
-};
-
-passInput.addEventListener('input', () => {
-  if (form.dataset.mode !== 'register') return;
-  const val = passInput.value;
-  reqs.length.style.color = val.length >= 8 ? '#00ffff' : '#aaa';
-  reqs.upper.style.color = /[A-Z]/.test(val) ? '#00ffff' : '#aaa';
-  reqs.lower.style.color = /[a-z]/.test(val) ? '#00ffff' : '#aaa';
-  reqs.digit.style.color = /\d/.test(val) ? '#00ffff' : '#aaa';
-  reqs.special.style.color = /[^A-Za-z0-9]/.test(val) ? '#00ffff' : '#aaa';
-});
-
-toggle.onclick = e => {
-  e.preventDefault();
-  if (form.dataset.mode === 'login') {
-    form.dataset.mode = 'register';
-    form.querySelector('button').textContent = 'Register';
-    toggle.textContent = 'Already have an account? Log In';
-    card.classList.add('expanded', 'register');
-    requirements.classList.add('active');
-    confirmWrapper.style.display = 'block';
-  } else {
-    form.dataset.mode = 'login';
-    form.querySelector('button').textContent = 'Log In';
-    toggle.textContent = 'Create account';
-    card.classList.remove('expanded', 'register');
-    requirements.classList.remove('active');
-    confirmWrapper.style.display = 'none';
-  }
-};
-
-form.onsubmit = e => {
-  e.preventDefault();
-
-  if (!navigator.onLine) {
-    showToast('⚠️ No internet — login disabled.');
-    return;
-  }
-
-  if (form.dataset.mode === 'register') {
-    const val = passInput.value;
-    const isWeak = val.length < 8 ||
-      !/[A-Z]/.test(val) ||
-      !/[a-z]/.test(val) ||
-      !/\d/.test(val) ||
-      !/[^A-Za-z0-9]/.test(val);
-
-    const notMatch = val !== confirmInput.value;
-
-    if (isWeak) showToast('❗ Password too weak.');
-    if (notMatch) showToast('❗ Passwords do not match.');
-
-    if (isWeak || notMatch) return;
-  }
-
-  showToast('✅ Form submitted! (Mock)');
-};
-
-document.getElementById('skipBtn').onclick = () => {
-  document.body.classList.remove('loaded');
-  setTimeout(() => { window.location.href = 'index.html'; }, 500);
-};
-
-const canvas = document.getElementById('matrixCanvas'), ctx = canvas.getContext('2d');
-const size = 14; let cols, drops;
-const chars = "アァイィウエェカキクケコサシスセソタチツテトナニヌネノ0123456789".split("");
-function initMatrix() {
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
-  cols = Math.floor(canvas.width / size);
-  drops = Array(cols).fill(1);
-}
-function drawMatrix() {
-  ctx.fillStyle = 'rgba(0,0,0,0.05)';
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = '#0f0';
-  ctx.font = `${size}px monospace`;
-  drops.forEach((y,i)=>{
-    const c = chars[Math.floor(Math.random()*chars.length)];
-    ctx.fillText(c, i*size, y*size);
-    drops[i] = (y*size > canvas.height && Math.random()>0.975) ? 0 : y+1;
-  });
-}
-initMatrix();
-setInterval(drawMatrix, 33);
-window.addEventListener('resize', initMatrix);
-window.addEventListener('load', () => {
-  requestAnimationFrame(() => document.body.classList.add('loaded'));
-});
-</script>
+      <button type="button" id="skipBtn" class="login-btn outline">Skip for now</button>
+      <button type="button" id="toggleMode" class="link-btn">Create account</button>
+    </div>
+  </section>
+</body>
+</html>

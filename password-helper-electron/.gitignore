@@ -1,9 +1,19 @@
-# Node modules
+# Dependencies
 node_modules/
 
-# Package manifests
-package.json
-package-lock.json
+# Build output (electron-builder)
+dist/
+out/
 
-# Optional: ignore environment files
+# Test output
+test-results/
+playwright-report/
+coverage/
+
+# Environment / secrets
 .env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*

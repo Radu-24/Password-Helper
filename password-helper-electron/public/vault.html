@@ -1,406 +1,182 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Password Helper – Vault</title>
-  <style>
-    /* ==== RESET & BASE ==== */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      width: 100%; height: 100%; overflow: hidden;
-      background: black; color: white;
-      font-family: 'Segoe UI', sans-serif;
-    }
-    body{ opacity:0; transition:opacity 0.5s ease; }
-    body.loaded{ opacity:1; }
-
-    /* ==== MATRIX BACKGROUND ==== */
-    canvas#matrixCanvas {
-      position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%; z-index: 0;
-      pointer-events: none;
-      filter: blur(2.5px) brightness(1.3);
-      opacity: 0.75;
-    }
-
-    /* ==== TITLEBAR ==== */
-    .titlebar {
-      position: absolute; top: 0; left: 0;
-      width: 100%; height: 40px;
-      background: #121212cc; -webkit-app-region: drag;
-      display: flex; justify-content: flex-end; align-items: center;
-      padding: 0 10px; z-index: 9999;
-      pointer-events: auto;
-    }
-    .titlebar button {
-      -webkit-app-region: no-drag;
-      width: 14px; height: 14px; margin-left: 12px;
-      border: none; border-radius: 50%; cursor: pointer;
-      background: transparent; color: white; font-size: 11px;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .titlebar .close { background: #ff5f56; }
-    .titlebar .min   { background: #ffbd2e; }
-    .titlebar .max   { background: #27c93f; }
-
-    /* ==== SCREENS & TRANSITIONS ==== */
-    .screen {
-      position: absolute; top: 0; left: 0;
-      width: 100%; height: 100vh;
-      display: flex; align-items: center; justify-content: center;
-      transform: translateY(20px); opacity: 0; pointer-events: none;
-      transition:
-        transform 0.6s cubic-bezier(.17,.67,.83,.67),
-        opacity   0.6s ease;
-      z-index: 2;
-    }
-    .screen.active {
-      transform: translateY(0); opacity: 1; pointer-events: auto;
-    }
-
-    /* ==== CARD ==== */
-    .card {
-      background: rgba(255,255,255,0.06);
-      backdrop-filter: blur(25px);
-      -webkit-backdrop-filter: blur(25px);
-      border-radius: 16px; padding: 40px;
-      width: 90%; max-width: 600px;
-      text-align: center;
-      box-shadow: 0 0 25px rgba(0,255,255,0.1);
-      z-index: 3;
-    }
-    .card h1, .card h2 {
-      margin-bottom: 20px;
-      background: linear-gradient(to right, #00ffff, #7289da);
-      -webkit-background-clip: text;
-      background-clip: text; color: transparent;
-    }
-    .card h1 { font-size: 36px; }
-    .card h2 { font-size: 28px; }
-
-    /* ==== BUTTONS ==== */
-    .btn {
-      display: block; width: 70%; margin: 16px auto 0;
-      background: #7289da; color: white; border: none;
-      border-radius: 8px; padding: 12px 26px;
-      font-size: 16px; cursor: pointer;
-      transition: transform 0.3s ease, background 0.3s ease;
-    }
-    .btn:hover { background: #5b6eae; transform: scale(1.05); }
-
-    /* ==== FORM GROUP ==== */
-    .form-group {
-      width: 80%; max-width: 400px;
-      margin: 12px auto;
-      text-align: left;
-    }
-    .form-group label {
-      font-size: 14px;
-      color: rgba(255,255,255,0.75);
-      letter-spacing: 0.5px;
-      margin-bottom: 6px;
-      display: block;
-    }
-    .form-group input,
-    .form-group select {
-      width: 100%;
-      padding: 12px 16px;
-      font-size: 16px;
-      color: white;
-      background: #ffffff12;
-      border: none;
-      border-radius: 8px;
-      backdrop-filter: blur(10px);
-      box-shadow: inset 0 2px 8px rgba(0,0,0,0.4);
-      transition: background 0.2s, border 0.2s;
-      appearance: none;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-    }
-    .form-group input:focus,
-    .form-group select:focus {
-      background: #ffffff1e;
-      border: 2px solid #7289da;
-      outline: none;
-    }
-    .form-group textarea {
-      width: 100%;
-      padding: 12px 16px;
-      font-size: 16px;
-      color: white;
-      background: #ffffff12;
-      border: none;
-      border-radius: 8px;
-      backdrop-filter: blur(10px);
-      box-shadow: inset 0 2px 8px rgba(0,0,0,0.4);
-      transition: background 0.2s, border 0.2s;
-      resize: none; /* Prevent manual resizing */
-      overflow: hidden;
-    }
-    .form-group textarea:focus {
-      background: #ffffff1e;
-      border: 2px solid #7289da;
-      outline: none;
-    }
-
-    /* ==== PASSWORD TOGGLE ==== */
-    .password-container {
-      position: relative; width: 300px; margin: 0 auto 16px;
-    }
-    .password-container input {
-      width: 100%;
-      padding: 12px; padding-right: 40px;
-      font-size: 18px; border: none; border-radius: 8px;
-      background: #ffffff12; color: white;
-      backdrop-filter: blur(10px);
-      outline: none; transition: border 0.2s ease;
-    }
-    .password-container input:focus {
-      border: 2px solid #7289da;
-    }
-    .password-container button {
-      position: absolute;
-      top: 0; bottom: 0; margin: auto; /* vertically center */
-      right: 10px;
-      background: transparent; border: none; cursor: pointer;
-      z-index: 4;
-    }
-    .password-container button img {
-      width: 24px; height: 24px;
-    }
-
-    /* ==== TOAST ==== */
-    #toast-container {
-      position: fixed; bottom: 20px; left: 50%;
-      transform: translateX(-50%); z-index: 10;
-      pointer-events: none;
-    }
-    .toast {
-      background: rgba(0,0,0,0.8);
-      color: #fff; padding: 8px 16px; margin-top: 8px;
-      border-radius: 16px; font-size: 14px;
-      opacity: 0; transform: translateY(20px);
-      transition: opacity 0.4s ease, transform 0.4s ease;
-      display: flex; align-items: center;
-    }
-    .toast.show { opacity: 1; transform: translateY(0); }
-    @keyframes shake {
-      0%,100% { transform: translateX(-50%) translateX(0); }
-      25%      { transform: translateX(-50%) translateX(-5px); }
-      75%      { transform: translateX(-50%) translateX(5px); }
-    }
-    #toast-container.shake { animation: shake 0.5s ease; }
-  </style>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/vault.css">
+  <script defer src="js/common.js"></script>
+  <script defer src="js/policy.js"></script>
+  <script defer src="js/strength.js"></script>
+  <script defer src="js/generator.js"></script>
+  <script defer src="js/wordlist-eff.js"></script>
+  <script defer src="js/vault-data.js"></script>
+  <script defer src="js/vault.js"></script>
 </head>
 <body>
-  <script> const { ipcRenderer } = require('electron'); </script>
-  <canvas id="matrixCanvas"></canvas>
+  <!-- LOADING (until we know whether the vault exists / is unlocked) -->
+  <section id="loading-screen" class="screen active" aria-busy="true">
+    <p class="loading-text">Opening vault…</p>
+  </section>
 
-  <!-- TITLEBAR -->
-  <div class="titlebar">
-    <button class="min"
-            onmouseenter="this.textContent='–'" onmouseleave="this.textContent=''"
-            onclick="ipcRenderer.send('window-control','min')"></button>
-    <button class="max"
-            onmouseenter="this.textContent='▢'" onmouseleave="this.textContent=''"
-            onclick="ipcRenderer.send('window-control','max')"></button>
-    <button class="close"
-            onmouseenter="this.textContent='✕'" onmouseleave="this.textContent=''"
-            onclick="ipcRenderer.send('window-control','close')"></button>
-  </div>
-
-  <!-- SCREEN 1: VAULT MENU -->
-  <div id="vault-menu-screen" class="screen active">
+  <!-- CREATE (first run) -->
+  <section id="create-screen" class="screen" aria-labelledby="create-title">
     <div class="card">
-      <h1>🗄️ Vault</h1>
-      <button class="btn" onclick="goToAdd()">➕ Add New</button>
-      <button class="btn" onclick="viewAll()">🔓 View All Entries</button>
-      <button class="btn" onclick="goBack()">← Back</button>
+      <h1 id="create-title">🔐 Create your vault</h1>
+      <p class="lead">Choose a <strong>master password</strong>. It encrypts everything in the vault and is never stored —
+        if you forget it, the vault can't be recovered.</p>
+      <form id="create-form" novalidate>
+        <div class="form-group">
+          <label for="create-password">Master password</label>
+          <div class="password-field">
+            <input type="password" id="create-password" class="field" autocomplete="new-password" maxlength="1024" autofocus>
+            <button type="button" class="reveal-btn" id="create-reveal"><img src="icons/eye.png" alt=""></button>
+          </div>
+          <div class="mini-meter" id="create-meter" aria-hidden="true"><div class="mini-meter-mask"></div></div>
+        </div>
+        <div class="form-group">
+          <label for="create-confirm">Confirm master password</label>
+          <div class="password-field">
+            <input type="password" id="create-confirm" class="field" autocomplete="new-password" maxlength="1024">
+            <button type="button" class="reveal-btn" id="create-confirm-reveal"><img src="icons/eye.png" alt=""></button>
+          </div>
+        </div>
+        <ul class="checklist form-group" id="create-checks" aria-label="Master password requirements">
+          <li data-check="length">At least 15 characters</li>
+          <li data-check="guess">Hard to guess — no common words, names or patterns</li>
+          <li data-check="breach">Not found in known data breaches</li>
+          <li data-check="match">Both passwords match</li>
+        </ul>
+        <p class="hint form-group">Tip: a passphrase of 5–6 random words (try the generator on the main menu) is strong and easy to remember.</p>
+        <p id="legacy-note" class="note form-group hidden"></p>
+        <button type="submit" class="btn" id="create-submit">🔐 Create vault</button>
+        <button type="button" class="btn secondary" data-action="home">← Back</button>
+      </form>
     </div>
-  </div>
+  </section>
 
-  <!-- SCREEN 2: ADD ENTRY -->
-  <div id="add-screen" class="screen">
+  <!-- UNLOCK -->
+  <section id="unlock-screen" class="screen" aria-labelledby="unlock-title">
     <div class="card">
-      <h1>➕ Add Entry</h1>
-
-      <div class="form-group">
-        <label for="label">Entry Label</label>
-        <input type="text" id="label" placeholder="e.g. example.com">
-      </div>
-
-      <div class="form-group">
-        <label for="type">Type</label>
-        <select id="type">
-          <option value="Website">Website</option>
-          <option value="App">App</option>
-          <option value="Email">Email</option>
-          <option value="Other">Other</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="username">Username / Email</label>
-        <input type="text" id="username" placeholder="e.g. you@example.com (optional)">
-      </div>
-
-      <div class="password-container">
-        <input type="password" id="vault-password" placeholder="Enter password">
-        <button onclick="toggleVaultPwd()">
-          <img id="vault-toggle-icon" src="icons/eye.png" alt="toggle">
-        </button>
-      </div>
-
-      <div class="form-group">
-        <label for="notes">Notes (optional)</label>
-        <textarea id="notes" rows="1" placeholder="e.g. recovery info…"></textarea>
-      </div>
-
-      <button class="btn" onclick="saveEntry()">💾 Save</button>
-      <button class="btn" onclick="showMenu()">← Cancel</button>
+      <h1 id="unlock-title">🔒 Vault locked</h1>
+      <form id="unlock-form" novalidate>
+        <div class="form-group">
+          <label for="unlock-password">Master password</label>
+          <div class="password-field">
+            <input type="password" id="unlock-password" class="field" autocomplete="current-password" maxlength="1024" autofocus>
+            <button type="button" class="reveal-btn" id="unlock-reveal"><img src="icons/eye.png" alt=""></button>
+          </div>
+          <p class="field-warning hidden" id="caps-warning" role="status">⇪ Caps Lock is on</p>
+        </div>
+        <button type="submit" class="btn" id="unlock-submit">🔓 Unlock</button>
+        <button type="button" class="btn secondary" data-action="home">← Back</button>
+      </form>
     </div>
-  </div>
+  </section>
 
-  <!-- TOAST CONTAINER -->
-  <div id="toast-container"></div>
+  <!-- VAULT MENU -->
+  <section id="vault-menu-screen" class="screen" aria-labelledby="vault-title">
+    <div class="card">
+      <h1 id="vault-title">🗄️ Vault</h1>
+      <button type="button" class="btn" id="btn-add" title="Ctrl+N">➕ Add New</button>
+      <button type="button" class="btn" id="btn-view" title="Ctrl+F">🔓 View All Entries</button>
+      <div class="btn-row">
+        <button type="button" class="small-btn" id="btn-change">🔑 Master password</button>
+        <button type="button" class="small-btn" id="btn-export">📤 Export backup</button>
+        <button type="button" class="small-btn" id="btn-import">📥 Import backup</button>
+      </div>
+      <button type="button" class="btn" id="btn-lock" title="Ctrl+L">🔒 Lock Vault</button>
+      <button type="button" class="btn secondary" data-action="home">← Back</button>
+    </div>
+  </section>
 
-  <script>
-    /* ===== MATRIX EFFECT ===== */
-    const canvas = document.getElementById('matrixCanvas'),
-          ctx    = canvas.getContext('2d'),
-          size   = 14;
-    let cols, drops;
-    const chars = "アァイィウエェカキクケコサシ斯セソタチツテトナニヌネノ0123456789".split("");
+  <!-- ADD / EDIT ENTRY -->
+  <section id="entry-screen" class="screen" aria-labelledby="entry-title">
+    <div class="card">
+      <h1 id="entry-title">➕ Add Entry</h1>
+      <form id="entry-form" novalidate>
+        <div class="form-group">
+          <label for="label">Entry Label</label>
+          <input type="text" id="label" class="field" placeholder="e.g. example.com" maxlength="200" autocomplete="off" autofocus>
+        </div>
 
-    function initMatrix(){
-      canvas.width = innerWidth;
-      canvas.height = innerHeight;
-      cols = Math.floor(canvas.width / size);
-      drops = Array(cols).fill(1);
-    }
-    function drawMatrix(){
-      ctx.fillStyle = 'rgba(0,0,0,0.05)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#0f0';
-      ctx.font = `${size}px monospace`;
-      drops.forEach((y, i) => {
-        const c = chars[Math.floor(Math.random() * chars.length)];
-        ctx.fillText(c, i * size, y * size);
-        drops[i] = (y * size > canvas.height && Math.random() > 0.975) ? 0 : y + 1;
-      });
-    }
-    initMatrix();
-    setInterval(drawMatrix, 33);
-    window.addEventListener('resize', initMatrix);
+        <div class="form-group">
+          <label for="type">Type</label>
+          <select id="type" class="field">
+            <option value="Website">Website</option>
+            <option value="App">App</option>
+            <option value="Email">Email</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
 
-    /* ===== TOASTS ===== */
-    const toastCt = document.getElementById('toast-container');
-    function showToast(msg){
-      if (toastCt.childElementCount >= 3){
-        toastCt.classList.add('shake');
-        setTimeout(()=>toastCt.classList.remove('shake'), 500);
-        return;
-      }
-      const t = document.createElement('div');
-      t.className = 'toast';
-      t.textContent = msg;
-      toastCt.appendChild(t);
-      requestAnimationFrame(()=>t.classList.add('show'));
-      setTimeout(()=>{
-        t.classList.remove('show');
-        setTimeout(()=>toastCt.removeChild(t), 400);
-      }, 3000);
-    }
+        <div class="form-group">
+          <label for="username">Username / Email</label>
+          <input type="text" id="username" class="field" placeholder="e.g. you@example.com (optional)" maxlength="320" autocomplete="off">
+        </div>
 
-    /* ===== SCREENS & NAVIGATION ===== */
-    const menuScreen = document.getElementById('vault-menu-screen'),
-          addScreen  = document.getElementById('add-screen');
+        <div class="form-group">
+          <label for="vault-password">Password</label>
+          <div class="password-field with-generate">
+            <input type="password" id="vault-password" class="field" placeholder="Enter or generate a password" maxlength="1024" autocomplete="new-password">
+            <button type="button" class="generate-btn" id="vault-generate" title="Generate a strong password (Ctrl+G)" aria-label="Generate a strong password">🎲</button>
+            <button type="button" class="reveal-btn" id="vault-reveal"><img src="icons/eye.png" alt=""></button>
+          </div>
+          <div class="mini-meter" id="entry-meter" aria-hidden="true"><div class="mini-meter-mask"></div></div>
+          <p class="hint" id="entry-strength" aria-live="polite"></p>
+        </div>
 
-    function showMenu(){
-      addScreen.classList.remove('active');
-      menuScreen.classList.add('active');
-    }
-    function goToAdd(){
-      menuScreen.classList.remove('active');
-      addScreen.classList.add('active');
-      clearForm();
-    }
-    function viewAll(){
-      // Navigate to the separate vault_view.html
-      transitionTo('vault_view.html');
-    }
-    function goBack(){
-      transitionTo('index.html');
-    }
+        <div class="form-group">
+          <label for="notes">Notes (optional)</label>
+          <textarea id="notes" class="field" rows="1" maxlength="10000" placeholder="e.g. recovery info…"></textarea>
+        </div>
 
-    /* ===== DATA STORAGE ===== */
-    // We store entries in localStorage under key "vaultEntries"
-    const labelInput    = document.getElementById('label'),
-          typeInput     = document.getElementById('type'),
-          userInput     = document.getElementById('username'),
-          pwdInput      = document.getElementById('vault-password'),
-          notesInput    = document.getElementById('notes'),
-          toggleIcon    = document.getElementById('vault-toggle-icon');
+        <button type="submit" class="btn" id="entry-submit">💾 Save</button>
+        <button type="button" class="btn secondary" id="btn-cancel">← Cancel</button>
+      </form>
+    </div>
+  </section>
 
-    let entries = [];
-    if (localStorage.getItem('vaultEntries')){
-      try {
-        entries = JSON.parse(localStorage.getItem('vaultEntries'));
-      } catch {
-        entries = [];
-      }
-    }
-
-    function persistEntries(){
-      localStorage.setItem('vaultEntries', JSON.stringify(entries));
-    }
-    function clearForm(){
-      labelInput.value = '';
-      typeInput.value = 'Website';
-      userInput.value = '';
-      pwdInput.value = '';
-      notesInput.value = '';
-      notesInput.style.height = 'auto';
-      pwdInput.type = 'password';
-      toggleIcon.src = 'icons/eye.png';
-    }
-
-    /* ===== ADD ENTRY LOGIC ===== */
-    function saveEntry(){
-      const label = labelInput.value.trim();
-      const type  = typeInput.value;
-      const user  = userInput.value.trim();
-      const pass  = pwdInput.value;
-      const notes = notesInput.value.trim();
-
-      if (!label){
-        return showToast('Please enter a label.');
-      }
-      if (!pass){
-        return showToast('Password cannot be empty.');
-      }
-
-      entries.push({ label, type, user, pass, notes });
-      persistEntries();
-      showToast('Entry saved.');
-      showMenu();
-    }
-
-    function toggleVaultPwd(){
-      const isText = pwdInput.type === 'text';
-      pwdInput.type = isText ? 'password' : 'text';
-      toggleIcon.src = isText ? 'icons/eye.png' : 'icons/eye-slash.png';
-      pwdInput.setSelectionRange(pwdInput.value.length, pwdInput.value.length);
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      requestAnimationFrame(() => document.body.classList.add('loaded'));
-    });
-
-    function transitionTo(url){
-      document.body.classList.remove('loaded');
-      setTimeout(()=>{ window.location.href=url; }, 500);
-    }
-  </script>
+  <!-- CHANGE MASTER PASSWORD -->
+  <section id="change-screen" class="screen" aria-labelledby="change-title">
+    <div class="card">
+      <h1 id="change-title">🔑 Change Master Password</h1>
+      <form id="change-form" novalidate>
+        <div class="form-group">
+          <label for="change-current">Current master password</label>
+          <div class="password-field">
+            <input type="password" id="change-current" class="field" autocomplete="current-password" maxlength="1024" autofocus>
+            <button type="button" class="reveal-btn" id="change-current-reveal"><img src="icons/eye.png" alt=""></button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="change-new">New master password</label>
+          <div class="password-field">
+            <input type="password" id="change-new" class="field" autocomplete="new-password" maxlength="1024">
+            <button type="button" class="reveal-btn" id="change-new-reveal"><img src="icons/eye.png" alt=""></button>
+          </div>
+          <div class="mini-meter" id="change-meter" aria-hidden="true"><div class="mini-meter-mask"></div></div>
+        </div>
+        <div class="form-group">
+          <label for="change-confirm">Confirm new master password</label>
+          <div class="password-field">
+            <input type="password" id="change-confirm" class="field" autocomplete="new-password" maxlength="1024">
+            <button type="button" class="reveal-btn" id="change-confirm-reveal"><img src="icons/eye.png" alt=""></button>
+          </div>
+        </div>
+        <ul class="checklist form-group" id="change-checks" aria-label="New master password requirements">
+          <li data-check="length">At least 15 characters</li>
+          <li data-check="guess">Hard to guess — no common words, names or patterns</li>
+          <li data-check="breach">Not found in known data breaches</li>
+          <li data-check="match">Both passwords match</li>
+        </ul>
+        <p class="note form-group">Backups you exported earlier keep the master password they were made with.</p>
+        <button type="submit" class="btn" id="change-submit">🔑 Change password</button>
+        <button type="button" class="btn secondary" id="change-cancel">← Cancel</button>
+      </form>
+    </div>
+  </section>
 </body>
 </html>
