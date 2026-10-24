@@ -41,19 +41,6 @@
 <body>
   <canvas id="matrix" aria-hidden="true"></canvas>
 
-  <!-- Window buttons. macOS draws its own, so these are hidden there. -->
-  <div class="traffic-lights" id="traffic-lights">
-    <button type="button" class="tl tl-close" data-window="close" aria-label="Close" title="Close">
-      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 3.5l5 5m0-5l-5 5"/></svg>
-    </button>
-    <button type="button" class="tl tl-min" data-window="minimize" aria-label="Minimize" title="Minimize">
-      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.75 6h6.5"/></svg>
-    </button>
-    <button type="button" class="tl tl-zoom" data-window="toggle-maximize" aria-label="Zoom" title="Zoom">
-      <svg viewBox="0 0 12 12" aria-hidden="true"><path class="tl-fill" d="M3.2 8.8V4.6l4.2 4.2zM8.8 3.2v4.2L4.6 3.2z"/></svg>
-    </button>
-  </div>
-
   <!-- ===================================================================
        WELCOME (first launch)
        =================================================================== -->
@@ -596,6 +583,20 @@
         </div>
       </section>
     </div>
+  </div>
+  <!-- Window buttons. macOS draws its own, so these are hidden there.
+       Kept last in <body>: Electron applies drag / no-drag regions in document order,
+       so they must come after the draggable sidebar and toolbars to stay clickable. -->
+  <div class="traffic-lights" id="traffic-lights">
+    <button type="button" class="tl tl-close" data-window="close" aria-label="Close" title="Close">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 3.5l5 5m0-5l-5 5"/></svg>
+    </button>
+    <button type="button" class="tl tl-min" data-window="minimize" aria-label="Minimize" title="Minimize">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.75 6h6.5"/></svg>
+    </button>
+    <button type="button" class="tl tl-zoom" data-window="toggle-maximize" aria-label="Zoom" title="Zoom">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path class="tl-fill" d="M3.2 8.8V4.6l4.2 4.2zM8.8 3.2v4.2L4.6 3.2z"/></svg>
+    </button>
   </div>
 </body>
 </html>
